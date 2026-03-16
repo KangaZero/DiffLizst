@@ -155,20 +155,19 @@ const notationScaleValue = document.querySelector<HTMLOutputElement>('#notation-
 const themeToggleButton = document.querySelector<HTMLButtonElement>('#theme-toggle')
 const themeToggleLabel = document.querySelector<HTMLSpanElement>('#theme-toggle-label')
 
-// Pagination element handle (typed, no any)
-type ToolkitInstance = InstanceType<typeof verovio.toolkit>
-let paginationEl: (HTMLElement & { total: number; page: number; toolkit: ToolkitInstance | null, notationContainer: HTMLDivElement | null }) | null = null
+// Pagination element handle (typed via global HTMLElementTagNameMap augmentation)
+let paginationEl: Pages | null = null
+
 if (!notationContainer || !notationScaleInput || !notationScaleValue || !themeToggleButton || !themeToggleLabel || !notationPanel) {
   throw new Error('App controls not found')
 }
 
 // create and insert pagination component into notation panel
-paginationEl = document.createElement('page-pagination') as (HTMLElement & { total: number; page: number; toolkit: ToolkitInstance | null, notationContainer: HTMLDivElement | null })
-paginationEl.notationContainer = notationContainer
-// sensible defaults
-paginationEl.page = 1
-paginationEl.total = 1
-paginationEl.toolkit = null
+paginationEl = document.createElement('page-pagination')
+//INFO: This is needed to be able to re-render the SVG
+paginationEl.notationContainer = notationContainer;
+
+console.log(paginationEl, 'pg')
 notationPanel.appendChild(paginationEl)
 
 type Theme = 'light' | 'dark'
@@ -206,7 +205,6 @@ if (savedTheme === 'light' || savedTheme === 'dark') {
 themeToggleButton.addEventListener('click', () => {
   const currentTheme = (root.dataset.theme as Theme | undefined) ?? getSystemTheme()
   const nextTheme: Theme = currentTheme === 'dark' ? 'light' : 'dark'
-
   applyTheme(nextTheme, true)
 })
 

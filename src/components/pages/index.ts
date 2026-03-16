@@ -40,12 +40,16 @@ export class Pages extends HTMLElement {
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, newValue: string | null) {
+    // console.log(`Attribute "${name}" changed from "${_oldValue}" to "${newValue}"`);
     if (name === 'total') {
       this.total = Number(newValue) || 1
     }
     if (name === 'page') {
       this.page = Number(newValue) || 1
     }
+    //INFO: This is added if the 'page' attribute was set somewhere else
+    //TODO: consider not having it, as this file should be the only place where this can run
+    this.updateNotationPage();
     this.render()
   }
 
@@ -132,13 +136,13 @@ export class Pages extends HTMLElement {
     while (this.container.firstChild) this.container.removeChild(this.container.firstChild)
   }
 
+  //TODO: consider having it public, could possibly be used somewhere else
   private updateNotationPage() {
     if (!this.toolkit) return console.error(`Missing toolkit, cannot updateNotationPage`)
     if (!this.notationContainer) return console.error(`Missing notationContainer, cannot updateNotationPage`)
     //WARNING: the renderToSVG() is already slow, enabling redoLayout() makes it even slower, consider having the user manually reseting the layout via a button
     // this.toolkit.redoLayout();
     this.notationContainer.innerHTML = this.toolkit.renderToSVG(this.page)
-    console.trace(this.toolkit)
   }
 
   render() {

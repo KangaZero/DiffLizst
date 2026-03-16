@@ -13,9 +13,9 @@ export const setNotationSVGIDToIndexBase = (notationContainer: HTMLDivElement): 
   notationContainer.childNodes.forEach((child, index) => {
     if (child.ELEMENT_NODE !== 1) return
     const childEl = child as HTMLElement
-    console.log(childEl, 'chil')
     if (childEl.tagName !== 'svg') return
     childEl.id = `notation-${index.toString()}`;
+    //INFO: After this on @/style.css the approriate styling is added to this ID
   })
 }
 // #l19nj5e9 g.ending, #l19nj5e9 g.fing, #l19nj5e9 g.reh, #l19nj5e9 g.tempo { font - weight: bold; } #l19nj5e9 g.dir, #l19nj5e9 g.dynam, #l19nj5e9 g.mNum { font - style: italic; } #l19nj5e9 g.label { font - weight: normal; } #l19nj5e9 ellipse, #l19nj5e9 path, #l19nj5e9 polygon, #l19nj5e9 polyline, #l19nj5e9 rect { stroke: currentColor }
