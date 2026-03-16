@@ -4,13 +4,24 @@ import './style.css'
 import './components/notation/note'
 //INFO: Components - others
 import './components/themeToggle'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { setupCounter } from './counter.ts'
+import './components/pages'
+//INFO: Utils
+import { setNotationSVGIDToIndexBase } from '@/utils/setNotationSVGIDToIndexBase'
+import { getTotalPageCount } from '@/utils/getTotalPageCount'
+//TODO: Remove below
+import typescriptLogo from '@/assets/typescript.svg'
+import viteLogo from '@/assets/vite.svg'
+import heroImg from '@/assets/hero.png'
+import { setupCounter } from '@/counter'
+
+
+
 import * as verovio from 'verovio'
-import type { VerovioOptions } from 'verovio'
-import { setNotationSVGIDToIndexBase } from './utils/setNotationSVGIDToIndexBase.ts'
+import { type VerovioOptions, toolkit as Toolkit } from 'verovio'
+// Load local Chopin etude MEI using Vite raw import
+// @ts-ignore: raw import as string
+import etudeMei from '@/scores/Chopin/etudeOp10No1.xml?raw'
+import type { Pages } from './components/pages'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
@@ -138,19 +149,32 @@ setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
 
 const root = document.documentElement
 const notationContainer = document.querySelector<HTMLDivElement>('#XML-notation')
+const notationPanel = document.querySelector<HTMLDivElement>('.notation-panel')
 const notationScaleInput = document.querySelector<HTMLInputElement>('#notation-scale')
 const notationScaleValue = document.querySelector<HTMLOutputElement>('#notation-scale-value')
 const themeToggleButton = document.querySelector<HTMLButtonElement>('#theme-toggle')
 const themeToggleLabel = document.querySelector<HTMLSpanElement>('#theme-toggle-label')
 
-if (!notationContainer || !notationScaleInput || !notationScaleValue || !themeToggleButton || !themeToggleLabel) {
+// Pagination element handle (typed, no any)
+type ToolkitInstance = InstanceType<typeof verovio.toolkit>
+let paginationEl: (HTMLElement & { total: number; page: number; toolkit: ToolkitInstance | null, notationContainer: HTMLDivElement | null }) | null = null
+if (!notationContainer || !notationScaleInput || !notationScaleValue || !themeToggleButton || !themeToggleLabel || !notationPanel) {
   throw new Error('App controls not found')
 }
+
+// create and insert pagination component into notation panel
+paginationEl = document.createElement('page-pagination') as (HTMLElement & { total: number; page: number; toolkit: ToolkitInstance | null, notationContainer: HTMLDivElement | null })
+paginationEl.notationContainer = notationContainer
+// sensible defaults
+paginationEl.page = 1
+paginationEl.total = 1
+paginationEl.toolkit = null
+notationPanel.appendChild(paginationEl)
 
 type Theme = 'light' | 'dark'
 
 let meiXML: string | null = null
-let toolkit: verovio.toolkit | null = null
+let toolkit: Toolkit | null = null
 const themeStorageKey = 'theme-preference'
 const themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -211,12 +235,22 @@ const renderNotation = () => {
     adjustPageHeight: true,
     breaks: 'auto',
     scale,
-    //INFO: This does not matter, as the id will be set to index-base in the setNotationSVGIDToIndexBase fn
+    //INFO: xmlIdSeed is remapped later by setNotationSVGIDToIndexBase
     xmlIdSeed: 1,
-    useFacsimile: true
+    useFacsimile: true,
+    systemMaxPerPage: 24,
   }
 
-  notationContainer.innerHTML = toolkit.renderData(meiXML, options)
+  const totalPages = getTotalPageCount(toolkit)
+  if (paginationEl) paginationEl.total = totalPages
+
+  // load the MEI into the toolkit and set options so we can render a single page
+  toolkit.loadData(meiXML)
+  toolkit.setOptions(options)
+  paginationEl.toolkit = toolkit;
+  const svg = toolkit.renderToSVG(paginationEl ? paginationEl.page : 1)
+
+  notationContainer.innerHTML = svg
   setNotationSVGIDToIndexBase(notationContainer)
 }
 
@@ -237,13 +271,8 @@ verovio.module.onRuntimeInitialized = async () => {
   toolkit = new verovio.toolkit()
 
   try {
-    const response = await fetch('https://www.verovio.org/examples/downloads/Schubert_Lindenbaum.mei')
-
-    if (!response.ok) {
-      throw new Error(`Failed to load MEI data: ${response.status} ${response.statusText}`)
-    }
-
-    meiXML = await response.text()
+    // Use bundled MEI content instead of fetching remotely
+    meiXML = etudeMei as string
     renderNotation()
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'

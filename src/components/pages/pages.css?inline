@@ -1,0 +1,8 @@
+:host{display:block;font-family:var(--sans);}
+.container{display:flex;gap:8px;align-items:center;justify-content:center;padding:8px}
+button.page-btn{min-width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-h);padding:0 8px;cursor:pointer}
+button.page-btn[aria-current="true"]{background:var(--accent);color:white;border-color:transparent}
+button.page-btn:disabled{opacity:0.45;cursor:not-allowed}
+button.control{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--social-bg);cursor:pointer}
+.ellipsis{padding:0 6px;color:var(--text)}
+@media (max-width:640px){.container{gap:6px;padding:6px}button.page-btn{min-width:30px;height:30px;border-radius:6px}}

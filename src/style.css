@@ -163,34 +163,35 @@
 
 /* Global notation SVG color-scheme*/
 /* TODO: Make it all customizable */
-#notation-0 {
+[id^="notation-"] {
   color: var(--text-h);
   fill: var(--text-h);
 }
 
-/* INFO: This comes from verovio, but originally to its xmlIdSeed. Here it is just redeclared to our index-based id */
-#notation-0 g.ending,
-#notation-0 g.fing,
-#notation-0 g.reh,
-#notation-0 g.tempo {
+/* INFO: This comes from verovio, but originally from its xmlIdSeed. Here it is just redeclared to our index-based id */
+/* all elements whose id starts with "notation-" */
+[id^="notation-"] g.ending,
+[id^="notation-"] g.fing,
+[id^="notation-"] g.reh,
+[id^="notation-"] g.tempo {
   font-weight: bold;
 }
 
-#notation-0 g.dir,
-#notation-0 g.dynam,
-#notation-0 g.mNum {
+[id^="notation-"] g.dir,
+[id^="notation-"] g.dynam,
+[id^="notation-"] g.mNum {
   font-style: italic;
 }
 
-#notation-0 g.label {
+[id^="notation-"] g.label {
   font-weight: normal;
 }
 
-#notation-0 ellipse,
-#notation-0 path,
-#notation-0 polygon,
-#notation-0 polyline,
-#notation-0 rect {
+[id^="notation-"] ellipse,
+[id^="notation-"] path,
+[id^="notation-"] polygon,
+[id^="notation-"] polyline,
+[id^="notation-"] rect {
   stroke: var(--text-h);
 }
 

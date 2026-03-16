@@ -13,6 +13,7 @@ export const setNotationSVGIDToIndexBase = (notationContainer: HTMLDivElement): 
   notationContainer.childNodes.forEach((child, index) => {
     if (child.ELEMENT_NODE !== 1) return
     const childEl = child as HTMLElement
+    console.log(childEl, 'chil')
     if (childEl.tagName !== 'svg') return
     childEl.id = `notation-${index.toString()}`;
   })
