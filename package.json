@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "bun run ./src/tests/MXMLDiffParser.test.ts ./src/scores/Chopin/etudeOp10No1.xml ./src/scores/Chopin/etudeOp10No1V2.xml"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
