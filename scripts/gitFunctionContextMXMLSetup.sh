@@ -21,7 +21,7 @@ else
 fi
 
 # Step 3: Configure git diff driver for musicxml
-git config diff.musicxml.xfuncname "^[[:space:]]*<(measure|part-list|score-part|credit|defaults|identification|attributes|direction|barline).*$"
+git config diff.musicxml.xfuncname "^[[:space:]]*<(measure|part-list|credit|defaults|identification|attributes).*$"
 
 echo "Configured git diff.musicxml.xfuncname"
 echo ""

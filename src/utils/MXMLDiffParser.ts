@@ -4,7 +4,7 @@
  */
 
 export interface DiffHunk {
-  header: string;
+  header: `@@${string}`; //eg. @@ -71, 320 +72,320 @@ measure
   lines: DiffLine[];
   parentContext?: string; // e.g., "measure number='2'" or "part-list"
 }
@@ -24,7 +24,7 @@ export interface ParsedDiff {
  * Parent tags that should show their full context when children change
  */
 const CONTEXT_PARENTS = [
-  'measure',
+  `measure`,
   'part-list',
   // 'score-part',
   'credit',
@@ -66,7 +66,7 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
     if (line.startsWith('@@')) {
       if (currentFile) {
         currentHunk = {
-          header: line,
+          header: line as DiffHunk['header'],
           lines: [],
         };
         currentFile.hunks.push(currentHunk);
@@ -85,6 +85,8 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
       }
 
       currentHunk.lines.push({
+        //TODO: this is not the right index, use it based on whether the previous context was a header, and use the header digits, and then reset index once it encounters a new header
+        lineNumber: i,
         type,
         content: line.substring(1), // Remove +/- prefix
       });
@@ -195,8 +197,7 @@ export function expandParentContext(
 /**
  * Detect which parent context tag we're inside
  */
-function detectParentContext(hunk: DiffHunk, xmlLines: string[]): typeof CONTEXT_PARENTS[number] | undefined {
-  console.log("hunk", hunk)
+function detectParentContext(hunk: DiffHunk, xmlLines: string[]): `${typeof CONTEXT_PARENTS[number]}${string}` | undefined {
   // Extract line number from hunk header: @@ -145,8 +145,8 @@
   const match = hunk.header.match(/@@ -(\d+),/);
   if (!match) return undefined;
@@ -211,6 +212,7 @@ function detectParentContext(hunk: DiffHunk, xmlLines: string[]): typeof CONTEXT
       // Match opening tag: <measure number="2">
       const openTagMatch = line.match(new RegExp(`<${parent}([^>]*)>`));
       if (openTagMatch) {
+        // console.log('detectParentContext', `${parent}${openTagMatch[1]}`)
         return `${parent}${openTagMatch[1]}`;
       }
     }
@@ -298,7 +300,8 @@ function reconstructDiff(parsed: ParsedDiff[]): string {
 
       for (const line of hunk.lines) {
         const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
-        result += `${prefix}${line.content}\n`;
+        const lineNumber = line.lineNumber
+        result += `${lineNumber ? `${lineNumber} | ` : ''}${prefix}${line.content}\n`;
       }
     }
   }
@@ -380,7 +383,6 @@ export async function getEnhancedMusicXMLDiff(
       // Detect which parent tag we're inside
       const context = detectParentContext(hunk, xmlLines);
 
-      console.log('context', context)
       if (context) {
         hunk.parentContext = context;
 
@@ -398,6 +400,7 @@ export async function getEnhancedMusicXMLDiff(
 
           // Extract attributes from context (e.g., "measure number='2'" -> {number: '2'})
           const attrMatch = context.match(/(\w+)=['"]([^'"]+)['"]/g);
+          //TODO: create all attributes for each the shouldExpand tags (eg. measures, credit, etc)
           const attributes: Record<string, string> = {};
           if (attrMatch) {
             attrMatch.forEach(attr => {
@@ -412,8 +415,10 @@ export async function getEnhancedMusicXMLDiff(
           if (fullTagContent) {
             // Replace hunk lines with complete block
             const completeLines = fullTagContent.split('\n');
-            const newLines: DiffLine[] = completeLines.map(line => ({
+            console.log(completeLines)
+            const newLines: DiffLine[] = completeLines.map((line, index) => ({
               type: 'context' as const,
+              // lineNumber: index,
               content: line,
             }));
 

@@ -88,7 +88,7 @@ try {
       file1,
       file2,
       noIndex: true,
-      context: 10,
+      context: 5,
       algorithm: 'patience',
     });
   } else {
@@ -96,7 +96,7 @@ try {
       file: file1,
       commit1,
       commit2,
-      context: 10,
+      context: 5,
       algorithm: 'patience',
     });
   }
@@ -113,7 +113,7 @@ try {
   if (mode === 'no-index') {
     enhancedDiff = await getEnhancedMusicXMLDiff(file1, {
       file2,
-      showFullMeasures: false,
+      showFullMeasures: true,
       showFullPartList: true,
       showFullCredit: true,
       showFullDefaults: true,
