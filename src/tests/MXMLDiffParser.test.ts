@@ -11,7 +11,8 @@ import {
   getMusicXMLDiff,
   getEnhancedMusicXMLDiff,
   formatDiffForTerminal,
-  parseMusicXMLDiff
+  parseMusicXMLDiff,
+  getMusicXMLDiffStats
 } from '@/utils/MXMLDiffParser';
 
 const args = process.argv.slice(2);
@@ -96,7 +97,7 @@ try {
       file: file1,
       commit1,
       commit2,
-      context: 5,
+      context: 8,
       algorithm: 'patience',
     });
   }
@@ -131,48 +132,28 @@ try {
     });
   }
 
+  //SPECIAL: THIS IS WHAT I WANT TO USE TO COMPARE
   console.log(formatDiffForTerminal(enhancedDiff));
   console.log('\n');
 
-  // Method 3: Parsed structure
   console.log('═══════════════════════════════════════════════════');
-  console.log('Method 3: Parsed Diff Structure');
+  console.log('Stats');
   console.log('═══════════════════════════════════════════════════\n');
-
-  const parsed = parseMusicXMLDiff(enhancedDiff);
-
-  for (const file of parsed) {
-    console.log(`📄 File: ${file.filename}`);
-    console.log(`   Hunks: ${file.hunks.length}\n`);
-
-    file.hunks.forEach((hunk, i) => {
-      console.log(`   Hunk ${i + 1}: ${hunk.header}`);
-      if (hunk.parentContext) {
-        console.log(`   └─ Context: <${hunk.parentContext}>`);
-      }
-      console.log(`   └─ Lines changed: ${hunk.lines.filter(l => l.type !== 'context').length}`);
-      console.log('');
-    });
+  let statOptions: {
+    file?: string;
+    file1?: string; // For --no-index mode
+    file2?: string; // For --no-index mode
+    commit1?: string;
+    commit2?: string;
+    noIndex?: boolean; // Compare files directly without git
   }
-
-  // Statistics
-  const totalAdditions = parsed.reduce((sum, file) =>
-    sum + file.hunks.reduce((hSum, hunk) =>
-      hSum + hunk.lines.filter(l => l.type === 'add').length, 0), 0);
-
-  const totalDeletions = parsed.reduce((sum, file) =>
-    sum + file.hunks.reduce((hSum, hunk) =>
-      hSum + hunk.lines.filter(l => l.type === 'remove').length, 0), 0);
-
-  console.log('═══════════════════════════════════════════════════');
-  console.log('📊 Summary Statistics');
-  console.log('═══════════════════════════════════════════════════');
-  console.log(`Mode: ${mode === 'no-index' ? 'Direct file comparison' : 'Git commit comparison'}`);
-  console.log(`Files changed: ${parsed.length}`);
-  console.log(`Total hunks: ${parsed.reduce((sum, f) => sum + f.hunks.length, 0)}`);
-  console.log(`Lines added: ${totalAdditions}`);
-  console.log(`Lines removed: ${totalDeletions}`);
-  console.log('');
+  if (mode == 'no-index') {
+    statOptions = {
+      file1, file2, noIndex: true
+    }
+    const statResponse = await getMusicXMLDiffStats((statOptions))
+    console.log(statResponse)
+  }
 
 } catch (error) {
   console.error('❌ Error:', String(error));

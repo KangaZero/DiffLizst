@@ -10,7 +10,7 @@ export interface DiffHunk {
 }
 
 export interface DiffLine {
-  type: 'add' | 'remove' | 'context' | 'header';
+  type: 'add' | 'remove' | 'context' | 'header' | 'parentOfContext';
   content: string;
   lineNumber?: number;
 }
@@ -83,10 +83,7 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
       } else if (line.startsWith('-')) {
         type = 'remove';
       }
-
       currentHunk.lines.push({
-        //TODO: this is not the right index, use it based on whether the previous context was a header, and use the header digits, and then reset index once it encounters a new header
-        lineNumber: i,
         type,
         content: line.substring(1), // Remove +/- prefix
       });
@@ -148,6 +145,51 @@ export async function getMusicXMLDiff(
   // Add color-words for inline highlighting
   if (colorWords) {
     args.push('--color-words');
+  }
+
+  // Handle different modes
+  if (file1 && file2) {
+    // --no-index mode: compare two files
+    args.push(file1, file2);
+  } else {
+    // Normal git mode: compare commits
+    if (commit1) args.push(commit1);
+    if (commit2) args.push(commit2);
+    if (file) args.push('--', file);
+  }
+
+  // Execute with Bun
+  const proc = Bun.spawn(['git', ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+
+  const output = await new Response(proc.stdout).text();
+  return output;
+}
+
+export async function getMusicXMLDiffStats(
+  options: {
+    file?: string;
+    file1?: string; // For --no-index mode
+    file2?: string; // For --no-index mode
+    commit1?: string;
+    commit2?: string;
+    noIndex?: boolean; // Compare files directly without git
+  } = {}
+): Promise<string> {
+  const {
+    file = '',
+    file1 = '',
+    file2 = '',
+    commit1 = '',
+    commit2 = '',
+    noIndex = false,
+  } = options;
+  const args = ['diff', '-w', '--stat'];
+  // Add --no-index for comparing files outside git
+  if (noIndex || (file1 && file2)) {
+    args.push('--no-index');
   }
 
   // Handle different modes
@@ -283,6 +325,7 @@ export function extractParentTag(
 
 /**
  * Reconstruct diff output with parent context annotations
+ *
  */
 function reconstructDiff(parsed: ParsedDiff[]): string {
   let result = '';
@@ -377,6 +420,7 @@ export async function getEnhancedMusicXMLDiff(
   // STEP 3: Parse the diff output
   const parsed = parseMusicXMLDiff(diff);
 
+  // console.log(JSON.stringify(parsed, null, 2), 'parsed')
   // STEP 4: Enhance each hunk with complete XML blocks
   for (const file of parsed) {
     for (const hunk of file.hunks) {
@@ -411,19 +455,16 @@ export async function getEnhancedMusicXMLDiff(
 
           // Get the complete tag content from source XML
           const fullTagContent = extractParentTag(xmlContent, tagName, attributes);
-
           if (fullTagContent) {
             // Replace hunk lines with complete block
             const completeLines = fullTagContent.split('\n');
-            console.log(completeLines)
-            const newLines: DiffLine[] = completeLines.map((line, index) => ({
-              type: 'context' as const,
-              // lineNumber: index,
-              content: line,
-            }));
 
-            // Merge with existing changes
-            hunk.lines = mergeHunkWithCompleteBlock(hunk.lines, newLines);
+            //INFO: Here we just take the 1st line of the fullTagContent as this is what is missing from git diff's function-context
+            //eg. <measure number="1" width="515">
+            hunk.lines.unshift({
+              type: 'parentOfContext',
+              content: completeLines[0]
+            })
           }
         }
       }
@@ -432,38 +473,6 @@ export async function getEnhancedMusicXMLDiff(
 
   return reconstructDiff(parsed);
 }
-
-/**
- * Merge existing diff lines with complete block to preserve +/- markers
- */
-function mergeHunkWithCompleteBlock(
-  hunkLines: DiffLine[],
-  completeBlockLines: DiffLine[]
-): DiffLine[] {
-  // Find all changed lines (additions/deletions)
-  const changes = hunkLines.filter(line => line.type === 'add' || line.type === 'remove');
-
-  if (changes.length === 0) {
-    return completeBlockLines; // No changes, just return complete block
-  }
-
-  // Create a map of line content to change type
-  const changeMap = new Map<string, 'add' | 'remove'>();
-  changes.forEach(line => {
-    if (line.type === 'header' || line.type === 'context') return
-    changeMap.set(line.content.trim(), line.type);
-  });
-
-  // Apply changes to complete block
-  return completeBlockLines.map(line => {
-    const changeType = changeMap.get(line.content.trim());
-    if (changeType) {
-      return { ...line, type: changeType };
-    }
-    return line;
-  });
-}
-
 /**
  * Format diff for terminal with colors (optional)
  */
