@@ -2,7 +2,7 @@
 
 /**
  * Test script for MusicXML diff parser
- * Usage: 
+ * Usage:
  *   bun run test-diff.ts <file.xml> [commit1] [commit2]
  *   bun run test-diff.ts <file1.xml> <file2.xml> --no-index
  */
@@ -11,9 +11,8 @@ import {
   getMusicXMLDiff,
   getEnhancedMusicXMLDiff,
   formatDiffForTerminal,
-  parseMusicXMLDiff,
-  getMusicXMLDiffStats
-} from '@/utils/MXMLDiffParser';
+  getMusicXMLDiffStats,
+} from "@/utils/MXMLDiffParser";
 
 const args = process.argv.slice(2);
 
@@ -49,18 +48,18 @@ Options will automatically show full context for:
 }
 
 // Check if --no-index mode
-const noIndexFlag = args.includes('--no-index');
-const filteredArgs = args.filter(arg => arg !== '--no-index');
+const noIndexFlag = args.includes("--no-index");
+const filteredArgs = args.filter((arg) => arg !== "--no-index");
 
 let file1: string;
 let file2: string | undefined;
 let commit1: string | undefined;
 let commit2: string | undefined;
-let mode: 'git' | 'no-index';
+let mode: "git" | "no-index";
 
 if (noIndexFlag || filteredArgs.length === 2) {
   // No-index mode: compare two files
-  mode = 'no-index';
+  mode = "no-index";
   [file1, file2] = filteredArgs;
 
   console.log(`\n🔍 Comparing two files directly (--no-index mode)`);
@@ -68,10 +67,10 @@ if (noIndexFlag || filteredArgs.length === 2) {
   console.log(`   File 2: ${file2}\n`);
 } else {
   // Git mode: compare commits
-  mode = 'git';
+  mode = "git";
   [file1, commit1, commit2] = filteredArgs;
-  commit1 = commit1 || 'HEAD~1';
-  commit2 = commit2 || 'HEAD';
+  commit1 = commit1 || "HEAD~1";
+  commit2 = commit2 || "HEAD";
 
   console.log(`\n🔍 Analyzing MusicXML diff for: ${file1}`);
   console.log(`   Comparing: ${commit1} → ${commit2}\n`);
@@ -79,18 +78,20 @@ if (noIndexFlag || filteredArgs.length === 2) {
 
 try {
   // Method 1: Basic diff with optimal flags
-  console.log('═══════════════════════════════════════════════════');
-  console.log(`Method 1: Basic Git Diff (-w --patience${mode === 'no-index' ? ' --no-index' : ''})`);
-  console.log('═══════════════════════════════════════════════════\n');
+  console.log("═══════════════════════════════════════════════════");
+  console.log(
+    `Method 1: Basic Git Diff (-w --patience${mode === "no-index" ? " --no-index" : ""})`,
+  );
+  console.log("═══════════════════════════════════════════════════\n");
 
   let basicDiff: string;
-  if (mode === 'no-index') {
+  if (mode === "no-index") {
     basicDiff = await getMusicXMLDiff({
       file1,
       file2,
       noIndex: true,
       context: 5,
-      algorithm: 'patience',
+      algorithm: "patience",
     });
   } else {
     basicDiff = await getMusicXMLDiff({
@@ -98,20 +99,20 @@ try {
       commit1,
       commit2,
       context: 8,
-      algorithm: 'patience',
+      algorithm: "patience",
     });
   }
 
   console.log(formatDiffForTerminal(basicDiff));
-  console.log('\n');
+  console.log("\n");
 
   // Method 2: Enhanced diff with parent context detection
-  console.log('═══════════════════════════════════════════════════');
-  console.log('Method 2: Enhanced Diff (with parent context tags)');
-  console.log('═══════════════════════════════════════════════════\n');
+  console.log("═══════════════════════════════════════════════════");
+  console.log("Method 2: Enhanced Diff (with parent context tags)");
+  console.log("═══════════════════════════════════════════════════\n");
 
   let enhancedDiff: string;
-  if (mode === 'no-index') {
+  if (mode === "no-index") {
     enhancedDiff = await getEnhancedMusicXMLDiff(file1, {
       file2,
       showFullMeasures: true,
@@ -134,11 +135,11 @@ try {
 
   //SPECIAL: THIS IS WHAT I WANT TO USE TO COMPARE
   console.log(formatDiffForTerminal(enhancedDiff));
-  console.log('\n');
+  console.log("\n");
 
-  console.log('═══════════════════════════════════════════════════');
-  console.log('Stats');
-  console.log('═══════════════════════════════════════════════════\n');
+  console.log("═══════════════════════════════════════════════════");
+  console.log("Stats");
+  console.log("═══════════════════════════════════════════════════\n");
   let statOptions: {
     file?: string;
     file1?: string; // For --no-index mode
@@ -146,16 +147,17 @@ try {
     commit1?: string;
     commit2?: string;
     noIndex?: boolean; // Compare files directly without git
-  }
-  if (mode == 'no-index') {
+  };
+  if (mode == "no-index") {
     statOptions = {
-      file1, file2, noIndex: true
-    }
-    const statResponse = await getMusicXMLDiffStats((statOptions))
-    console.log(statResponse)
+      file1,
+      file2,
+      noIndex: true,
+    };
+    const statResponse = await getMusicXMLDiffStats(statOptions);
+    console.log(statResponse);
   }
-
 } catch (error) {
-  console.error('❌ Error:', String(error));
+  console.error("❌ Error:", String(error));
   process.exit(1);
 }

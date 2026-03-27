@@ -1,32 +1,32 @@
 // INFO: Global stylesheet
-import './style.css'
+import "./style.css";
 //INFO: Components - notation
-import './components/notation/note'
+import "./components/notation/note";
 //INFO: Components - others
-import './components/themeToggle'
-import './components/pages'
+import "./components/themeToggle";
+import "./components/pages";
 //INFO: Utils
-import { setNotationSVGIDToIndexBase } from '@/utils/setNotationSVGIDToIndexBase'
-import { getTotalPageCount } from '@/utils/getTotalPageCount'
+import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
+import { getTotalPageCount } from "@/utils/getTotalPageCount";
+import { diffXML } from "@/utils/diffXML";
+import { applyDiffHighlights } from "@/utils/applyDiffHighlights";
 //TODO: Remove below
-import typescriptLogo from '@/assets/typescript.svg'
-import viteLogo from '@/assets/vite.svg'
-import heroImg from '@/assets/hero.png'
+import typescriptLogo from "@/assets/typescript.svg";
+import viteLogo from "@/assets/vite.svg";
+import heroImg from "@/assets/hero.png";
 
-
-
-import * as verovio from 'verovio'
-import { type VerovioOptions, toolkit as Toolkit } from 'verovio'
+import * as verovio from "verovio";
+import { type VerovioOptions, toolkit as Toolkit } from "verovio";
 // Load local Chopin etude MEI using Vite raw import
 // @ts-ignore: raw import as string
-import etudeMei from '@/scores/Chopin/etudeOp10No1.xml?raw'
-import etudeMei2 from '@/scores/Chopin/etudeOp10No2.xml?raw'
-import type { Pages } from './components/pages'
+import etudeMei from "@/scores/Chopin/etudeOp10No1.xml?raw";
+import etudeMei2 from "@/scores/Chopin/etudeOp10No2.xml?raw";
+import type { Pages } from "./components/pages";
 
-const app = document.querySelector<HTMLDivElement>('#app')
+const app = document.querySelector<HTMLDivElement>("#app");
 
 if (!app) {
-  throw new Error('App root element not found')
+  throw new Error("App root element not found");
 }
 
 app.innerHTML = `
@@ -83,20 +83,6 @@ app.innerHTML = `
         </div>
         <div id="XML-notation" class="notation-stage">Loading score...</div>
       </div>
-      <ul>
-        <li>
-          <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-            <img class="logo" src="${viteLogo}" alt="" />
-            Explore Vite
-          </a>
-        </li>
-        <li>
-          <a href="https://www.typescriptlang.org" target="_blank" rel="noreferrer">
-            <img class="button-icon" src="${typescriptLogo}" alt="" />
-            Learn more
-          </a>
-        </li>
-      </ul>
     </div>
     <div id="social">
         <div id="XML-notation-compare" class="notation-stage">Loading score...</div>
@@ -145,119 +131,142 @@ app.innerHTML = `
 
   <div class="ticks"></div>
   <section id="spacer"></section>
-`
-const root = document.documentElement
-const notationContainer = document.querySelector<HTMLDivElement>('#XML-notation')
-const notationContainer2 = document.querySelector<HTMLDivElement>('#XML-notation-compare')
-const notationPanel = document.querySelector<HTMLDivElement>('.notation-panel')
-const notationScaleInput = document.querySelector<HTMLInputElement>('#notation-scale')
-const notationScaleValue = document.querySelector<HTMLOutputElement>('#notation-scale-value')
-const themeToggleButton = document.querySelector<HTMLButtonElement>('#theme-toggle')
-const themeToggleLabel = document.querySelector<HTMLSpanElement>('#theme-toggle-label')
+`;
+const root = document.documentElement;
+const notationContainer =
+  document.querySelector<HTMLDivElement>("#XML-notation");
+const notationContainer2 = document.querySelector<HTMLDivElement>(
+  "#XML-notation-compare",
+);
+const notationPanel = document.querySelector<HTMLDivElement>(".notation-panel");
+const notationScaleInput =
+  document.querySelector<HTMLInputElement>("#notation-scale");
+const notationScaleValue = document.querySelector<HTMLOutputElement>(
+  "#notation-scale-value",
+);
+const themeToggleButton =
+  document.querySelector<HTMLButtonElement>("#theme-toggle");
+const themeToggleLabel = document.querySelector<HTMLSpanElement>(
+  "#theme-toggle-label",
+);
 
 // Pagination element handle (typed via global HTMLElementTagNameMap augmentation)
-let paginationEl: Pages | null = null
-let paginationEl2: Pages | null = null
+let paginationEl: Pages | null = null;
+let paginationEl2: Pages | null = null;
 
-if (!notationContainer || !notationContainer2 || !notationScaleInput || !notationScaleValue || !themeToggleButton || !themeToggleLabel || !notationPanel) {
-  throw new Error('App controls not found')
+if (
+  !notationContainer ||
+  !notationContainer2 ||
+  !notationScaleInput ||
+  !notationScaleValue ||
+  !themeToggleButton ||
+  !themeToggleLabel ||
+  !notationPanel
+) {
+  throw new Error("App controls not found");
 }
 
 // create and insert pagination component into notation panel
-paginationEl = document.createElement('page-pagination')
-paginationEl2 = document.createElement('page-pagination')
+paginationEl = document.createElement("page-pagination");
+paginationEl2 = document.createElement("page-pagination");
 //INFO: This is needed to be able to re-render the SVG
 paginationEl.notationContainer = notationContainer;
 paginationEl2.notationContainer = notationContainer2;
 
-
 //TODO: Make the notation as a single component and pass all controls/paginaiton etc to it as a param
-notationPanel.appendChild(paginationEl)
+notationPanel.appendChild(paginationEl);
 
-type Theme = 'light' | 'dark'
+type Theme = "light" | "dark";
 
-let meiXML: string | null = null
-let meiXML2: string | null = null
-let toolkit: Toolkit | null = null
-let toolkit2: Toolkit | null = null
-const themeStorageKey = 'theme-preference'
-const themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+let meiXML: string | null = null;
+let meiXML2: string | null = null;
+let toolkit: Toolkit | null = null;
+let toolkit2: Toolkit | null = null;
+const themeStorageKey = "theme-preference";
+const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-const getSystemTheme = (): Theme => (themeMediaQuery.matches ? 'dark' : 'light')
+const getSystemTheme = (): Theme =>
+  themeMediaQuery.matches ? "dark" : "light";
 
 const syncThemeToggle = (theme: Theme) => {
-  const isDark = theme === 'dark'
-  themeToggleButton.setAttribute('aria-pressed', String(isDark))
-  themeToggleLabel.textContent = `Theme: ${isDark ? 'Dark' : 'Light'}`
-}
+  const isDark = theme === "dark";
+  themeToggleButton.setAttribute("aria-pressed", String(isDark));
+  themeToggleLabel.textContent = `Theme: ${isDark ? "Dark" : "Light"}`;
+};
 
 const applyTheme = (theme: Theme, persist = false) => {
-  root.dataset.theme = theme
-  syncThemeToggle(theme)
+  root.dataset.theme = theme;
+  syncThemeToggle(theme);
 
   if (persist) {
-    window.localStorage.setItem(themeStorageKey, theme)
+    window.localStorage.setItem(themeStorageKey, theme);
   }
-}
+};
 
-const savedTheme = window.localStorage.getItem(themeStorageKey)
+const savedTheme = window.localStorage.getItem(themeStorageKey);
 
-if (savedTheme === 'light' || savedTheme === 'dark') {
-  applyTheme(savedTheme)
+if (savedTheme === "light" || savedTheme === "dark") {
+  applyTheme(savedTheme);
 } else {
-  syncThemeToggle(getSystemTheme())
+  syncThemeToggle(getSystemTheme());
 }
 
-themeToggleButton.addEventListener('click', () => {
-  const currentTheme = (root.dataset.theme as Theme | undefined) ?? getSystemTheme()
-  const nextTheme: Theme = currentTheme === 'dark' ? 'light' : 'dark'
-  applyTheme(nextTheme, true)
-})
+themeToggleButton.addEventListener("click", () => {
+  const currentTheme =
+    (root.dataset.theme as Theme | undefined) ?? getSystemTheme();
+  const nextTheme: Theme = currentTheme === "dark" ? "light" : "dark";
+  applyTheme(nextTheme, true);
+});
 
-themeMediaQuery.addEventListener('change', (event) => {
+themeMediaQuery.addEventListener("change", (event) => {
   if (window.localStorage.getItem(themeStorageKey)) {
-    return
+    return;
   }
 
-  syncThemeToggle(event.matches ? 'dark' : 'light')
-})
+  syncThemeToggle(event.matches ? "dark" : "light");
+});
 
 const updateScaleLabel = (scale: number) => {
-  if (scale > 1000) return console.error('Maximum is 1000')
-  if (scale < 1) return console.error('Minimum is 1')
-  notationScaleValue.value = `${scale}%`
-  notationScaleValue.textContent = `${scale}%`
-}
+  if (scale > 1000) return console.error("Maximum is 1000");
+  if (scale < 1) return console.error("Minimum is 1");
+  notationScaleValue.value = `${scale}%`;
+  notationScaleValue.textContent = `${scale}%`;
+};
 
-const renderNotation = (meiXMLFile: string | null, paginationEl: Pages, toolkit: Toolkit | null, notationContainer: HTMLDivElement) => {
+const renderNotation = (
+  meiXMLFile: string | null,
+  paginationEl: Pages,
+  toolkit: Toolkit | null,
+  notationContainer: HTMLDivElement,
+) => {
   if (!toolkit || !meiXMLFile) {
-    return console.warn("No toolkit or xmlfile")
+    return console.warn("No toolkit or xmlfile");
   }
 
   // const scale = Number(notationScaleInput.value)
   const options: VerovioOptions = {
     adjustPageHeight: true,
-    breaks: 'auto',
+    breaks: "auto",
     // scale,
     //INFO: xmlIdSeed is remapped later by setNotationSVGIDToIndexBase
     // xmlIdSeed: 1,
     useFacsimile: true,
     systemMaxPerPage: 24,
-  }
+  };
 
-  const totalPages = getTotalPageCount(toolkit)
-  if (paginationEl) paginationEl.total = totalPages
+  const totalPages = getTotalPageCount(toolkit);
+  if (paginationEl) paginationEl.total = totalPages;
 
   // load the MEI into the toolkit and set options so we can render a single page
-  toolkit.loadData(meiXMLFile)
-  toolkit.setOptions(options)
+  toolkit.loadData(meiXMLFile);
+  toolkit.setOptions(options);
   paginationEl.toolkit = toolkit;
-  const svg = toolkit.renderToSVG(paginationEl ? paginationEl.page : 1)
+  const svg = toolkit.renderToSVG(paginationEl ? paginationEl.page : 1);
 
-  notationContainer.innerHTML = svg
-  console.trace(svg, 'svg')
-  setNotationSVGIDToIndexBase(notationContainer)
-}
+  notationContainer.innerHTML = svg;
+  console.trace(svg, "svg");
+  setNotationSVGIDToIndexBase(notationContainer);
+};
 
 // updateScaleLabel(Number(notationScaleInput.value))
 // notationScaleInput.addEventListener('input', () => {
@@ -273,17 +282,20 @@ const renderNotation = (meiXMLFile: string | null, paginationEl: Pages, toolkit:
 // resizeObserver.observe(notationContainer)
 
 verovio.module.onRuntimeInitialized = async () => {
-  toolkit = new verovio.toolkit()
-  toolkit2 = new verovio.toolkit()
+  toolkit = new verovio.toolkit();
+  toolkit2 = new verovio.toolkit();
   try {
     // Use bundled MEI content instead of fetching remotely
-    meiXML = etudeMei as string
-    meiXML2 = etudeMei2 as string
+    meiXML = etudeMei as string;
+    meiXML2 = etudeMei2 as string;
 
-    renderNotation(meiXML, paginationEl, toolkit, notationContainer)
-    renderNotation(meiXML2, paginationEl, toolkit2, notationContainer2)
+    renderNotation(meiXML, paginationEl, toolkit, notationContainer);
+    renderNotation(meiXML2, paginationEl, toolkit2, notationContainer2);
+
+    const xmlDiff = diffXML(meiXML, meiXML2);
+    applyDiffHighlights(notationContainer, notationContainer2, xmlDiff);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    notationContainer.textContent = `Unable to load score: ${message}`
+    const message = error instanceof Error ? error.message : "Unknown error";
+    notationContainer.textContent = `Unable to load score: ${message}`;
   }
-}
+};
