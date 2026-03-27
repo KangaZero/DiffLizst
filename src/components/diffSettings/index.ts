@@ -40,6 +40,8 @@ export type DiffSettingsValue = {
   contextLines: number;
   ignoreWhitespace: boolean;
   algorithm: 'patience' | 'histogram' | 'myers';
+  /** When `true`, line numbers are rendered alongside each diff line. Default: `true`. */
+  showLineNumbers: boolean;
 };
 
 /** Default values shown when the component first renders. */
@@ -47,6 +49,7 @@ const DEFAULTS: DiffSettingsValue = {
   contextLines: 2,
   ignoreWhitespace: true,
   algorithm: 'patience',
+  showLineNumbers: true,
 };
 
 // Gear icon (Lucide `settings-2` path, MIT licensed)
@@ -221,6 +224,14 @@ template.innerHTML = `
     <input id="ignore-ws" type="checkbox" ${DEFAULTS.ignoreWhitespace ? 'checked' : ''} />
   </div>
 
+  <div class="row">
+    <div class="label-wrap">
+      <label for="show-line-nos">Show line numbers</label>
+      <span class="hint">Display line numbers in diff view &amp; tooltip</span>
+    </div>
+    <input id="show-line-nos" type="checkbox" ${DEFAULTS.showLineNumbers ? 'checked' : ''} />
+  </div>
+
   <div class="section-divider"></div>
 
   <div class="row">
@@ -243,6 +254,7 @@ export class DiffSettings extends HTMLElement {
   private _ctxInput!: HTMLInputElement;
   private _wsInput!: HTMLInputElement;
   private _algoSelect!: HTMLSelectElement;
+  private _lineNosInput!: HTMLInputElement;
 
   /** Bound reference kept so the listener can be removed on disconnect. */
   private _onOutsideClick = (e: MouseEvent) => {
@@ -254,20 +266,22 @@ export class DiffSettings extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this.shadowRoot!.appendChild(template.content.cloneNode(true));
 
-    this._trigger    = this.shadowRoot!.querySelector('.trigger')!;
-    this._panel      = this.shadowRoot!.querySelector('.panel')!;
-    this._ctxInput   = this.shadowRoot!.querySelector('#ctx-lines')!;
-    this._wsInput    = this.shadowRoot!.querySelector('#ignore-ws')!;
-    this._algoSelect = this.shadowRoot!.querySelector('#algorithm')!;
+    this._trigger      = this.shadowRoot!.querySelector('.trigger')!;
+    this._panel        = this.shadowRoot!.querySelector('.panel')!;
+    this._ctxInput     = this.shadowRoot!.querySelector('#ctx-lines')!;
+    this._wsInput      = this.shadowRoot!.querySelector('#ignore-ws')!;
+    this._algoSelect   = this.shadowRoot!.querySelector('#algorithm')!;
+    this._lineNosInput = this.shadowRoot!.querySelector('#show-line-nos')!;
   }
 
   connectedCallback() {
     this._trigger.addEventListener('click', () => this._toggle());
 
     // Emit on any control change so the parent re-runs the diff immediately
-    this._ctxInput.addEventListener('input',   () => this._emit());
-    this._wsInput.addEventListener('change',   () => this._emit());
+    this._ctxInput.addEventListener('input',    () => this._emit());
+    this._wsInput.addEventListener('change',    () => this._emit());
     this._algoSelect.addEventListener('change', () => this._emit());
+    this._lineNosInput.addEventListener('change', () => this._emit());
 
     // Close when user clicks outside the component
     document.addEventListener('click', this._onOutsideClick);
@@ -288,6 +302,7 @@ export class DiffSettings extends HTMLElement {
       contextLines:     Math.max(0, Math.min(10, Number(this._ctxInput.value) || 0)),
       ignoreWhitespace: this._wsInput.checked,
       algorithm:        this._algoSelect.value as DiffSettingsValue['algorithm'],
+      showLineNumbers:  this._lineNosInput.checked,
     };
   }
 

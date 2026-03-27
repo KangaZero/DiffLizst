@@ -18,6 +18,16 @@ export type DiffLine = {
   type: DiffLineType;
   /** Raw text content of the line (no leading `+`/`-`/` ` prefix). */
   content: string;
+  /**
+   * 1-based line number in the old (left) file.
+   * Present on `'remove'` and `'context'` lines; absent on `'add'` lines.
+   */
+  oldLineNo?: number;
+  /**
+   * 1-based line number in the new (right) file.
+   * Present on `'add'` and `'context'` lines; absent on `'remove'` lines.
+   */
+  newLineNo?: number;
 };
 
 /**
@@ -210,16 +220,27 @@ function elementDiff(
 
   // Diff on normalised lines, then map result back to original content
   const normalised = diffLines(normLines1, normLines2);
-  let r1 = 0; // raw index pointer for old lines
-  let r2 = 0; // raw index pointer for new lines
+  let r1 = 0;        // raw index pointer for old lines
+  let r2 = 0;        // raw index pointer for new lines
+  let oldLineNo = 1; // 1-based line counter for the old file
+  let newLineNo = 1; // 1-based line counter for the new file
   const withRaw: DiffLine[] = normalised.map(dl => {
-    if (dl.type === 'remove') return { type: 'remove', content: rawLines1[r1++] };
-    if (dl.type === 'add')    return { type: 'add',    content: rawLines2[r2++] };
-    r1++; r2++;
-    return { type: 'context', content: dl.content };
+    if (dl.type === 'remove') return { type: 'remove', content: rawLines1[r1++], oldLineNo: oldLineNo++ };
+    if (dl.type === 'add')    return { type: 'add',    content: rawLines2[r2++], newLineNo: newLineNo++ };
+    // Context lines: show raw content from the old file (not the normalised string)
+    // so that the original indentation is preserved in the tooltip.
+    const content = rawLines1[r1++];
+    r2++;
+    return { type: 'context', content, oldLineNo: oldLineNo++, newLineNo: newLineNo++ };
   });
 
-  return { changeType: 'change', label, lines: trimContext(withRaw, opts.contextLines) };
+  const trimmed = trimContext(withRaw, opts.contextLines);
+  // If trimmed is empty every remaining line is context, meaning the only
+  // differences were whitespace and ignoreWhitespace absorbed them — treat
+  // this element as unchanged so no overlay is shown.
+  if (trimmed.length === 0) return null;
+
+  return { changeType: 'change', label, lines: trimmed };
 }
 
 /**
@@ -237,7 +258,12 @@ function singleSideDiff(
     .serializeToString(el)
     .split('\n')
     .filter(l => l.trim())
-    .map(l => ({ type: changeType, content: l }));
+    .map((l, i): DiffLine => ({
+      type: changeType,
+      content: l,
+      // Add lines carry new-file numbers; remove lines carry old-file numbers.
+      ...(changeType === 'remove' ? { oldLineNo: i + 1 } : { newLineNo: i + 1 }),
+    }));
   return { changeType, label, lines };
 }
 

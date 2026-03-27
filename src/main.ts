@@ -20,7 +20,7 @@ import "./components/diffSettings";
 // ─── Utilities ────────────────────────────────────────────────────────────
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
 import { getTotalPageCount } from "@/utils/getTotalPageCount";
-import { diffXML, DEFAULT_DIFF_OPTIONS, type DiffOptions, type XMLDiffResult } from "@/utils/diffXML";
+import { diffXML, DEFAULT_DIFF_OPTIONS, type DiffOptions, type XMLDiffResult, type ElementDiff } from "@/utils/diffXML";
 import { applyDiffHighlights, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
 
 // ─── Verovio ──────────────────────────────────────────────────────────────
@@ -53,12 +53,34 @@ if (!app) throw new Error("App root element not found");
  */
 app.innerHTML = `
 <header id="toolbar">
-  <span class="app-title">MusicDiff</span>
+  <div class="toolbar-start">
+    <span class="app-title">MusicDiff</span>
+    <button
+      id="view-toggle"
+      class="view-toggle-btn"
+      type="button"
+      aria-label="Toggle diff view"
+      aria-pressed="false"
+      title="Raw diff view"
+    >
+      <!-- Code/diff icon (Lucide "code-xml") -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m18 16 4-4-4-4"/>
+        <path d="m6 8-4 4 4 4"/>
+        <path d="m14.5 4-5 16"/>
+      </svg>
+    </button>
+  </div>
   <div class="toolbar-end">
     <diff-settings></diff-settings>
     <theme-toggle></theme-toggle>
   </div>
 </header>
+
+<!-- Diff page: GitHub-style raw diff view, hidden by default -->
+<section id="diff-page" aria-label="Raw diff view"></section>
 
 <section id="center">
   <button
@@ -131,6 +153,8 @@ const scale2Output = document.querySelector<HTMLOutputElement>("#scale-2-value")
 const themeToggleButton = document.querySelector<HTMLButtonElement>("#theme-toggle")!;
 const themeToggleLabel  = document.querySelector<HTMLSpanElement>("#theme-toggle-label")!;
 const diffSettingsEl    = document.querySelector<HTMLElement>("diff-settings")!;
+const viewToggleBtn     = document.querySelector<HTMLButtonElement>("#view-toggle")!;
+const diffPageEl        = document.querySelector<HTMLElement>("#diff-page")!;
 
 if (
   !notationContainer || !notationContainer2 ||
@@ -139,7 +163,8 @@ if (
   !scale1Input       || !scale1Output       ||
   !scale2Input       || !scale2Output       ||
   !themeToggleButton || !themeToggleLabel   ||
-  !diffSettingsEl
+  !diffSettingsEl    || !viewToggleBtn      ||
+  !diffPageEl
 ) {
   throw new Error("Required app elements not found in DOM");
 }
@@ -182,6 +207,9 @@ let measureIdMap2 = new Map<string, number>();
 
 /** Currently active diff options (updated by the settings panel). */
 let diffOpts: DiffOptions = { ...DEFAULT_DIFF_OPTIONS };
+
+/** Whether line numbers are rendered in the diff page and tooltip. */
+let showLineNumbers = true;
 
 // ─── Theme ─────────────────────────────────────────────────────────────────
 
@@ -274,6 +302,7 @@ function reapplyDiff(): void {
     xmlDiff,
     measureIdMap1,
     measureIdMap2,
+    showLineNumbers,
   );
 }
 
@@ -289,7 +318,139 @@ function runDiff(opts: DiffOptions = diffOpts): void {
   if (!meiXML || !meiXML2) return;
   xmlDiff = diffXML(meiXML, meiXML2, opts);
   reapplyDiff();
+  // If the diff page is currently visible, refresh it to reflect new settings
+  if (activeView === "diff") renderDiffPage();
 }
+
+// ─── Diff page rendering ───────────────────────────────────────────────────
+
+/** Identifiers of the two score files, shown in the file header of the diff page. */
+const SCORE_NAMES = {
+  old: "scores/Chopin/etudeOp10No1.xml",
+  new: "scores/Chopin/etudeOp10No2.xml",
+} as const;
+
+/**
+ * Escape `<`, `>`, `&` in a string so it is safe to inject as HTML text
+ * content (e.g. inside a `<span>`).
+ */
+function escapeHTML(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Render a GitHub-style unified diff view into `#diff-page` from the
+ * current `xmlDiff` result.
+ *
+ * The output mirrors what `formatDiffForTerminal` produces in the CLI test
+ * scripts, but uses HTML + CSS classes instead of ANSI escape codes so it
+ * renders correctly in the browser.
+ *
+ * Structure per changed element:
+ * ```
+ * @@ [label] @@
+ *  context line
+ * - removed line
+ * + added line
+ * ```
+ *
+ * Credits are shown first (they appear at the top of the score), then
+ * measures in ascending order.
+ *
+ * If no diff is available yet (e.g. scores still loading) a placeholder
+ * message is shown instead.
+ */
+function renderDiffPage(): void {
+  if (!xmlDiff || (xmlDiff.measures.size === 0 && xmlDiff.credits.size === 0)) {
+    diffPageEl.innerHTML = `<p class="diff-page-empty">No differences found between the two scores.</p>`;
+    return;
+  }
+
+  /**
+   * Build the HTML for a single hunk (one changed element).
+   *
+   * Each line gets a `diff-page-line` div containing:
+   * - Two line-number gutters (old + new), when `showLineNumbers` is `true`.
+   * - A sign gutter (`+` / `-` / ` `).
+   * - The escaped code content.
+   */
+  function hunkHTML(diff: ElementDiff): string {
+    const linesHTML = diff.lines.map(l => {
+      const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
+      const lineNosHTML = showLineNumbers
+        ? `<span class="diff-page-gutter diff-line-no">${l.oldLineNo ?? ""}</span>` +
+          `<span class="diff-page-gutter diff-line-no">${l.newLineNo ?? ""}</span>`
+        : "";
+      return `<div class="diff-page-line diff-line-${l.type}">` +
+        lineNosHTML +
+        `<span class="diff-page-gutter">${glyph}</span>` +
+        `<span class="diff-page-code">${escapeHTML(l.content)}</span>` +
+        `</div>`;
+    }).join("");
+    return `<div class="diff-hunk-header">@@ ${diff.label} @@</div>${linesHTML}`;
+  }
+
+  // Sort credits by index, measures by number — matches document order
+  const creditHunks = [...xmlDiff.credits.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, d]) => hunkHTML(d))
+    .join("");
+
+  const measureHunks = [...xmlDiff.measures.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, d]) => hunkHTML(d))
+    .join("");
+
+  diffPageEl.innerHTML =
+    `<div class="diff-page-file-header">` +
+      `<span class="diff-file-old">--- ${SCORE_NAMES.old}</span>` +
+      `<span class="diff-file-new">+++ ${SCORE_NAMES.new}</span>` +
+    `</div>` +
+    `<div class="diff-page-hunks">${creditHunks}${measureHunks}</div>`;
+}
+
+// ─── View toggle ───────────────────────────────────────────────────────────
+
+/** The two main sections that are mutually exclusive. */
+const notationSections = [
+  document.querySelector<HTMLElement>(".shared-controls")!,
+  document.querySelector<HTMLElement>("#next-steps")!,
+];
+
+/**
+ * Tracks which view is currently active.
+ * `"notation"` shows the side-by-side SVG view.
+ * `"diff"`     shows the GitHub-style raw diff page.
+ */
+let activeView: "notation" | "diff" = "notation";
+
+/**
+ * Switch between the notation view and the raw diff page.
+ *
+ * On switching to diff view the diff page is (re-)rendered from the latest
+ * `xmlDiff` so it always reflects the current settings.
+ */
+function toggleView(): void {
+  activeView = activeView === "notation" ? "diff" : "notation";
+  const isDiff = activeView === "diff";
+
+  viewToggleBtn.setAttribute("aria-pressed", String(isDiff));
+  notationSections.forEach(el => {
+    if (el) el.style.display = isDiff ? "none" : "";
+  });
+
+  if (isDiff) {
+    diffPageEl.classList.add("visible");
+    renderDiffPage();
+  } else {
+    diffPageEl.classList.remove("visible");
+  }
+}
+
+viewToggleBtn.addEventListener("click", toggleView);
 
 // ─── Scale event listeners ─────────────────────────────────────────────────
 
@@ -348,10 +509,11 @@ scale2Input.addEventListener("input", () => {
 diffSettingsEl.addEventListener("settings-change", (e) => {
   const settings = (e as CustomEvent<DiffSettingsValue>).detail;
   diffOpts = {
-    contextLines:    settings.contextLines,
+    contextLines:     settings.contextLines,
     ignoreWhitespace: settings.ignoreWhitespace,
-    algorithm:       settings.algorithm,
+    algorithm:        settings.algorithm,
   };
+  showLineNumbers = settings.showLineNumbers;
   runDiff(diffOpts);
 });
 

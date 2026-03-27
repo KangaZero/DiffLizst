@@ -567,7 +567,16 @@ code {
   box-shadow: var(--shadow);
   padding: var(--space-2) 0;
   pointer-events: none;
+
+  /* Thin scrollbar — Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
+
+/* Thin scrollbar — WebKit / Blink */
+#diff-tooltip::-webkit-scrollbar         { width: 3px; }
+#diff-tooltip::-webkit-scrollbar-track   { background: transparent; }
+#diff-tooltip::-webkit-scrollbar-thumb   { background: var(--border); border-radius: 2px; }
 
 #diff-tooltip.diff-tooltip--visible {
   display: flex;
@@ -586,6 +595,15 @@ code {
 .diff-tooltip-body {
   display: flex;
   flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.diff-tooltip-body::-webkit-scrollbar        { height: 3px; width: 3px; }
+.diff-tooltip-body::-webkit-scrollbar-track  { background: transparent; }
+.diff-tooltip-body::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+
+.diff-tooltip-body {
   font-family: var(--mono);
   font-size: var(--font-size-xs);
   background: transparent;
@@ -615,11 +633,183 @@ code {
   color: var(--text);
 }
 
+/* Line-number gutter columns — used in both tooltip and diff page */
+.diff-line-no {
+  display: inline-block;
+  min-width: 3ch;
+  text-align: right;
+  padding-right: 6px;
+  color: var(--text);
+  opacity: 0.4;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sign character (+/-/space) in tooltip when line numbers are shown */
+.diff-line-sign {
+  padding-right: 4px;
+  user-select: none;
+}
+
 .notation-stage svg {
   display: block;
   width: 100%;
   height: auto;
   max-width: 100%;
+}
+
+/* ─── Toolbar view-toggle button ──────────────────────────────── */
+
+.toolbar-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.view-toggle-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.view-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.view-toggle-btn[aria-pressed='true'] {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* ─── Diff page view ───────────────────────────────────────────── */
+
+#diff-page {
+  display: none;
+  flex-direction: column;
+  padding: var(--space-6) 32px;
+  gap: var(--space-4);
+  flex: 1 1 auto;
+}
+
+#diff-page.visible {
+  display: flex;
+}
+
+.diff-page-file-header {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+  padding: var(--space-3) var(--space-4);
+  background: var(--social-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  gap: 2px;
+}
+
+.diff-page-file-header .diff-file-old { color: var(--notation-diff-remove); }
+.diff-page-file-header .diff-file-new { color: var(--notation-diff-add); }
+
+.diff-page-hunks {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+
+  /* Thin scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.diff-page-hunks::-webkit-scrollbar        { height: 3px; width: 3px; }
+.diff-page-hunks::-webkit-scrollbar-track  { background: transparent; }
+.diff-page-hunks::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+
+.diff-hunk-header {
+  padding: var(--space-1) var(--space-4);
+  background: color-mix(in srgb, var(--color-info) 8%, var(--code-bg));
+  color: var(--color-info);
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+
+.diff-hunk-header:first-child {
+  border-top: none;
+}
+
+/* Re-use the same .diff-line-* classes from the tooltip */
+.diff-page-line {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+  line-height: 1.6;
+}
+
+.diff-page-line.diff-line-add    { background: var(--notation-diff-add-bg); }
+.diff-page-line.diff-line-remove { background: var(--notation-diff-remove-bg); }
+.diff-page-line.diff-line-context { background: transparent; }
+
+.diff-page-gutter {
+  width: 20px;
+  min-width: 20px;
+  text-align: center;
+  padding: 0 var(--space-2);
+  user-select: none;
+  color: var(--text);
+  opacity: 0.5;
+}
+
+/* Line-number gutters in the diff page are right-aligned and slightly wider */
+.diff-page-gutter.diff-line-no {
+  min-width: 3ch;
+  width: auto;
+  text-align: right;
+  padding-right: 6px;
+  opacity: 0.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-line-add    .diff-page-gutter { color: var(--notation-diff-add); opacity: 1; }
+.diff-line-remove .diff-page-gutter { color: var(--notation-diff-remove); opacity: 1; }
+
+.diff-page-code {
+  flex: 1 1 auto;
+  padding: 0 var(--space-4) 0 var(--space-2);
+  overflow-x: auto;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.diff-page-code::-webkit-scrollbar        { height: 3px; }
+.diff-page-code::-webkit-scrollbar-track  { background: transparent; }
+.diff-page-code::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+
+.diff-page-empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text);
+  font-size: var(--font-size-sm);
 }
 
 #next-steps ul {
