@@ -9,7 +9,13 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { diffXML, DEFAULT_DIFF_OPTIONS } from "@/utils/diffXML";
+import { diffXML, type XMLDiffOptions } from "@/utils/diffXML";
+
+const DEFAULT_DIFF_OPTIONS: XMLDiffOptions = {
+  contextLines: 2,
+  ignoreWhitespace: true,
+  algorithm: "patience",
+};
 
 // ─── Minimal XML fixtures ─────────────────────────────────────────────────
 
@@ -55,7 +61,7 @@ describe("diffXML", () => {
   describe("identical XMLs", () => {
     it("returns empty maps when both scores are the same", () => {
       const xml = makeXML();
-      const result = diffXML(xml, xml);
+      const result = diffXML(xml, xml, DEFAULT_DIFF_OPTIONS);
       expect(result.measures.size).toBe(0);
       expect(result.credits.size).toBe(0);
     });
@@ -65,7 +71,7 @@ describe("diffXML", () => {
     it("detects a changed credit-words text", () => {
       const xml1 = makeXML({ creditText: "Original Title" });
       const xml2 = makeXML({ creditText: "Changed Title" });
-      const result = diffXML(xml1, xml2);
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
 
       expect(result.credits.size).toBe(1);
       const diff = result.credits.get(0)!;
@@ -82,7 +88,7 @@ describe("diffXML", () => {
     it("detects a changed note pitch inside a measure", () => {
       const xml1 = makeXML({ measure1Note: "<step>C</step><octave>4</octave>" });
       const xml2 = makeXML({ measure1Note: "<step>D</step><octave>4</octave>" });
-      const result = diffXML(xml1, xml2);
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
 
       expect(result.measures.has(1)).toBe(true);
       const diff = result.measures.get(1)!;
@@ -93,7 +99,7 @@ describe("diffXML", () => {
     it("does not flag an unchanged measure", () => {
       const xml1 = makeXML({ measure1Note: "<step>C</step><octave>4</octave>" });
       const xml2 = makeXML({ measure1Note: "<step>D</step><octave>4</octave>" });
-      const result = diffXML(xml1, xml2);
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
 
       // Measure 2 is unchanged — should not appear in the result
       expect(result.measures.has(2)).toBe(false);
@@ -103,7 +109,7 @@ describe("diffXML", () => {
       const extra = `<measure number="3"><note><pitch><step>G</step><octave>4</octave></pitch></note></measure>`;
       const xml1 = makeXML();
       const xml2 = makeXML({ extraMeasure: extra });
-      const result = diffXML(xml1, xml2);
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
 
       expect(result.measures.has(3)).toBe(true);
       expect(result.measures.get(3)!.changeType).toBe("add");
@@ -113,7 +119,7 @@ describe("diffXML", () => {
       const extra = `<measure number="3"><note><pitch><step>G</step><octave>4</octave></pitch></note></measure>`;
       const xml1 = makeXML({ extraMeasure: extra });
       const xml2 = makeXML();
-      const result = diffXML(xml1, xml2);
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
 
       expect(result.measures.has(3)).toBe(true);
       expect(result.measures.get(3)!.changeType).toBe("remove");

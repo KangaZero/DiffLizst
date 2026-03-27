@@ -65,7 +65,7 @@ function getTooltip(): HTMLDivElement {
  * @param diff            The element diff to render.
  * @param showLineNumbers Whether to prepend old/new line number columns.
  */
-function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
+function buildTooltipHTML(diff: ElementDiff): string {
   const header = `<span class="diff-tooltip-header">@@ ${diff.label} @@</span>`;
   const body = diff.lines
     .map((l) => {
@@ -75,18 +75,6 @@ function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
-      if (showLineNumbers) {
-        const oldNo = l.oldLineNo != null ? String(l.oldLineNo) : "";
-        const newNo = l.newLineNo != null ? String(l.newLineNo) : "";
-        return (
-          `<span class="${cls}">` +
-          `<span class="diff-line-no">${oldNo}</span>` +
-          `<span class="diff-line-no">${newNo}</span>` +
-          `<span class="diff-line-sign">${prefix}</span>` +
-          escaped +
-          `</span>`
-        );
-      }
       return `<span class="${cls}">${prefix}${escaped}</span>`;
     })
     .join("");
@@ -133,10 +121,9 @@ function createOverlay(
   targetEl: Element,
   container: HTMLElement,
   diff: ElementDiff,
-  showLineNumbers: boolean,
 ): HTMLDivElement {
   const tooltip = getTooltip();
-  const html = buildTooltipHTML(diff, showLineNumbers);
+  const html = buildTooltipHTML(diff);
 
   const overlay = document.createElement("div");
   overlay.className = `diff-overlay diff-overlay--${diff.changeType}`;
@@ -240,7 +227,6 @@ export function applyDiffHighlights(
   diff: XMLDiffResult,
   measureIdToNum1: Map<string, number>,
   measureIdToNum2: Map<string, number>,
-  showLineNumbers = true,
 ): void {
   // Remove stale overlays from the previous render
   [container1, container2].forEach((c) =>
@@ -258,7 +244,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "add") return; // 'add' only shown on right side
-    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
+    container1.appendChild(createOverlay(el, container1, d));
   });
 
   container2.querySelectorAll<SVGGElement>("g.measure").forEach((el) => {
@@ -267,7 +253,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "remove") return; // 'remove' only shown on left side
-    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
+    container2.appendChild(createOverlay(el, container2, d));
   });
 
   // ── Credits (page header text) ─────────────────────────────────────────
@@ -287,10 +273,10 @@ export function applyDiffHighlights(
     const t1 = texts1[idx];
     const t2 = texts2[idx];
     if (t1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(createOverlay(t1, container1, d, showLineNumbers));
+      container1.appendChild(createOverlay(t1, container1, d));
     }
     if (t2 && (d.changeType === "change" || d.changeType === "add")) {
-      container2.appendChild(createOverlay(t2, container2, d, showLineNumbers));
+      container2.appendChild(createOverlay(t2, container2, d));
     }
   }
 }

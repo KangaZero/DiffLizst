@@ -22,8 +22,7 @@ import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase
 import { getTotalPageCount } from "@/utils/getTotalPageCount";
 import {
   diffXML,
-  DEFAULT_DIFF_OPTIONS,
-  type DiffOptions,
+  type XMLDiffOptions,
   type XMLDiffResult,
   type ElementDiff,
   type DiffLine,
@@ -58,7 +57,10 @@ import etudeMei from "@/scores/Chopin/etudeOp10No1.xml?raw";
 import etudeMei2 from "@/scores/Chopin/etudeOp10No2.xml?raw";
 
 import type { Pages } from "./components/pages";
-import type { DiffSettingsValue } from "./components/diffSettings";
+import {
+  DEFAULT_SETTINGS,
+  type DiffSettingsValue,
+} from "./components/diffSettings";
 
 // ─── DOM bootstrap ────────────────────────────────────────────────────────
 
@@ -120,6 +122,7 @@ app.innerHTML = `
   <div class="toolbar-end">
     <diff-settings></diff-settings>
     <theme-toggle></theme-toggle>
+
   </div>
 </header>
 
@@ -131,6 +134,7 @@ app.innerHTML = `
     <button id="diff-edit-toggle" class="diff-edit-btn" type="button" aria-pressed="false" title="Toggle edit mode">Edit</button>
   </div>
   <div id="diff-editor-container"></div>
+  <!-- <div id="single-editor-container"></div> -->
 </section>
 
 <!-- Git diff page: hunked unified/split diff view, hidden by default -->
@@ -207,23 +211,35 @@ const scale2Input = document.querySelector<HTMLInputElement>("#scale-2")!;
 const scale2Output =
   document.querySelector<HTMLOutputElement>("#scale-2-value")!;
 
-const diffSettingsEl    = document.querySelector<HTMLElement>("diff-settings")!;
-const viewToggleBtn     = document.querySelector<HTMLButtonElement>("#view-toggle")!;
-const gitDiffToggleBtn      = document.querySelector<HTMLButtonElement>("#git-diff-toggle")!;
-const diffPageEl            = document.querySelector<HTMLElement>("#diff-page")!;
-const gitDiffPageEl         = document.querySelector<HTMLElement>("#git-diff-page")!;
-const gitDiffHunksEl        = document.querySelector<HTMLElement>("#git-diff-hunks")!;
-const gitDiffSplitToggleBtn = document.querySelector<HTMLButtonElement>("#git-diff-split-toggle")!;
+const diffSettingsEl = document.querySelector<HTMLElement>("diff-settings")!;
+const viewToggleBtn =
+  document.querySelector<HTMLButtonElement>("#view-toggle")!;
+const gitDiffToggleBtn =
+  document.querySelector<HTMLButtonElement>("#git-diff-toggle")!;
+const diffPageEl = document.querySelector<HTMLElement>("#diff-page")!;
+const gitDiffPageEl = document.querySelector<HTMLElement>("#git-diff-page")!;
+const gitDiffHunksEl = document.querySelector<HTMLElement>("#git-diff-hunks")!;
+const gitDiffSplitToggleBtn = document.querySelector<HTMLButtonElement>(
+  "#git-diff-split-toggle",
+)!;
 
 if (
-  !notationContainer      || !notationContainer2     ||
-  !notationPanel          || !notationPanel2          ||
-  !sharedScaleInput       || !sharedScaleOutput       ||
-  !scale1Input            || !scale1Output            ||
-  !scale2Input            || !scale2Output            ||
-  !diffSettingsEl         || !viewToggleBtn           ||
-  !gitDiffToggleBtn       || !diffPageEl              ||
-  !gitDiffPageEl          || !gitDiffHunksEl          ||
+  !notationContainer ||
+  !notationContainer2 ||
+  !notationPanel ||
+  !notationPanel2 ||
+  !sharedScaleInput ||
+  !sharedScaleOutput ||
+  !scale1Input ||
+  !scale1Output ||
+  !scale2Input ||
+  !scale2Output ||
+  !diffSettingsEl ||
+  !viewToggleBtn ||
+  !gitDiffToggleBtn ||
+  !diffPageEl ||
+  !gitDiffPageEl ||
+  !gitDiffHunksEl ||
   !gitDiffSplitToggleBtn
 ) {
   throw new Error("Required app elements not found in DOM");
@@ -247,7 +263,7 @@ notationPanel2.prepend(paginationEl2);
 
 // ─── Mutable rendering state ───────────────────────────────────────────────
 
-type Theme = "light" | "dark";
+// type Theme = "light" | "dark";
 
 let meiXML: string | null = null;
 let meiXML2: string | null = null;
@@ -257,6 +273,9 @@ let toolkit2: Toolkit | null = null;
 /** Cached diff result, recomputed when settings change. */
 let xmlDiff: XMLDiffResult | null = null;
 
+/** Single source of truth for all user-configurable diff settings. */
+let currentSettings: DiffSettingsValue = { ...DEFAULT_SETTINGS };
+
 /**
  * SVG id → MusicXML measure number maps, built once after each `loadData`.
  * Used by {@link applyDiffHighlights} to identify which measure each
@@ -264,30 +283,22 @@ let xmlDiff: XMLDiffResult | null = null;
  */
 let measureIdMap1 = new Map<string, number>();
 let measureIdMap2 = new Map<string, number>();
-
-/** Currently active diff options (updated by the settings panel). */
-let diffOpts: DiffOptions = { ...DEFAULT_DIFF_OPTIONS };
-
-/** Whether line numbers are rendered in the diff page and tooltip. */
-let showLineNumbers = true;
-
 // ─── Theme ─────────────────────────────────────────────────────────────────
-
 const themeStorageKey = "theme-preference";
 const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-const applyTheme = (theme: Theme, persist = false) => {
-  root.dataset.theme = theme;
-  // Keep Monaco in sync — setTheme is global across all editor instances
-  monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
-  if (persist) window.localStorage.setItem(themeStorageKey, theme);
-};
-
-const savedTheme = window.localStorage.getItem(themeStorageKey);
-if (savedTheme === "light" || savedTheme === "dark") {
-  applyTheme(savedTheme);
-}
-
+//
+// const applyTheme = (theme: Theme, persist = false) => {
+//   root.dataset.theme = theme;
+//   // Keep Monaco in sync — setTheme is global across all editor instances
+//   monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs-light");
+//   if (persist) window.localStorage.setItem(themeStorageKey, theme);
+// };
+//
+// const savedTheme = window.localStorage.getItem(themeStorageKey);
+// if (savedTheme === "light" || savedTheme === "dark") {
+//   applyTheme(savedTheme);
+// }
+//
 themeMediaQuery.addEventListener("change", (_) => {
   if (window.localStorage.getItem(themeStorageKey)) return;
 });
@@ -348,7 +359,6 @@ function reapplyDiff(): void {
     xmlDiff,
     measureIdMap1,
     measureIdMap2,
-    showLineNumbers,
   );
 }
 
@@ -360,11 +370,12 @@ function reapplyDiff(): void {
  *
  * @param opts Diff options; defaults to the last options set by the user.
  */
-function runDiff(opts: DiffOptions = diffOpts): void {
+function runDiff(opts: XMLDiffOptions = currentSettings): void {
   if (!meiXML || !meiXML2) return;
   xmlDiff = diffXML(meiXML, meiXML2, opts);
   reapplyDiff();
-  if (activeView === "monaco")  renderDiffPage();
+  // Monaco renders its own diff from its models — it does not read xmlDiff.
+  // Only the git diff page needs an explicit refresh here.
   if (activeView === "gitdiff") renderGitDiffPage();
 }
 
@@ -372,14 +383,21 @@ function runDiff(opts: DiffOptions = diffOpts): void {
 
 /** Singleton Monaco diff editor, created lazily on first view toggle. */
 let monacoDiffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
+// let monacoSingleEditor: monaco.editor.IStandaloneCodeEditor | null = null;
 
 /** Whether the modified (right) pane is currently editable. */
 let diffEditorEditable = false;
+
+/** Disposable for the modified-editor content listener (re-created with each new model). */
+let monacoContentDisposable: monaco.IDisposable | null = null;
 
 /** Container div that Monaco mounts into (child of `#diff-page`). */
 const diffEditorContainer = document.querySelector<HTMLElement>(
   "#diff-editor-container",
 )!;
+// const singleEditorContainer = document.querySelector<HTMLElement>(
+//   "#single-editor-container",
+// )!;
 
 /** Edit-mode toggle button in the diff page header. */
 const diffEditToggleBtn =
@@ -387,7 +405,6 @@ const diffEditToggleBtn =
 
 diffEditToggleBtn.addEventListener("click", () => {
   diffEditorEditable = !diffEditorEditable;
-  // Only the modified (right) pane is toggled — original stays read-only always
   monacoDiffEditor
     ?.getModifiedEditor()
     .updateOptions({ readOnly: !diffEditorEditable });
@@ -396,55 +413,129 @@ diffEditToggleBtn.addEventListener("click", () => {
 });
 
 /**
- * Return the Monaco theme string that matches the current app theme.
+ * Minimal generic debounce — waits `ms` milliseconds of silence before
+ * calling `fn`. Resets the timer on every new call.
  */
-function getMonacoTheme(): string {
-  return (root.dataset.theme ?? "light") === "dark" ? "vs-dark" : "vs";
+function debounce<T extends unknown[]>(
+  fn: (...args: T) => void,
+  ms: number,
+): (...args: T) => void {
+  let timer: ReturnType<typeof setTimeout>;
+  return (...args: T) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
 }
 
 /**
- * Create or update the Monaco side-by-side diff editor.
+ * Propagate Monaco edits back to the rest of the app.
  *
- * First call: mounts the editor into `#diff-editor-container` with the raw
- * XML strings as the original/modified models.
- * Subsequent calls: updates the models and any option changes (line numbers,
- * theme) without re-creating the editor, preserving scroll position.
- *
- * The modified (right) pane is editable — call
- * `monacoDiffEditor.getModifiedEditor().getValue()` to read the user's edits.
+ * Called (debounced) whenever the user types in the modified pane:
+ * 1. Reads the current XML out of Monaco and updates `meiXML2`.
+ * 2. Re-runs the LCS diff so SVG overlays and the git diff page reflect the change.
+ * 3. Re-renders the Verovio score 2 in the background so the notation view is
+ *    ready with updated highlights when the user switches back. Invalid XML
+ *    during mid-edit is silently ignored.
  */
-function renderDiffPage(): void {
+const syncFromMonaco = debounce(() => {
+  if (!monacoDiffEditor || !meiXML) return;
+  meiXML2 = monacoDiffEditor.getModifiedEditor().getValue();
+
+  // Recompute LCS diff + SVG overlays (runDiff no longer touches Monaco)
+  runDiff();
+
+  // Re-render Verovio score 2 in the background (notation may be hidden)
+  if (toolkit2) {
+    try {
+      const scale = Number(scale2Input.value);
+      renderNotation(
+        meiXML2,
+        paginationEl2,
+        toolkit2,
+        notationContainer2,
+        scale,
+      );
+      measureIdMap2 = buildMeasureIdMap(toolkit2);
+      reapplyDiff(); // re-overlay with fresh measure map
+    } catch {
+      // XML is temporarily invalid while editing — skip silently
+    }
+  }
+}, 600);
+
+/**
+ * Return the Monaco theme string that matches the current app theme.
+ * NOTE: Only on first render, subsequent theme changes are handled in the theme-toggle btn element
+ */
+function getMonacoTheme(): string {
+  return (root.dataset.theme ?? "light") === "dark" ? "vs-dark" : "vs-light";
+}
+
+/**
+ * Mount or update the Monaco side-by-side diff editor.
+ *
+ * **First call** — creates the editor, sets the initial models (original XML
+ * on the left, score 2 on the right), and wires up the content-change
+ * listener so edits propagate back via {@link syncFromMonaco}.
+ *
+ * **Subsequent calls** — only updates visual options (line numbers, theme).
+ * Models are intentionally left untouched so user edits are not lost when
+ * diff settings change.
+ */
+function renderCodeDiffPage(): void {
   if (!meiXML || !meiXML2) return;
 
   if (!monacoDiffEditor) {
+    // monacoSingleEditor = monaco.editor.create(singleEditorContainer, {
+    //   value:
+    //     "yooooosdsajlksd lkslkj lsjdlk sdj lksj dslkd jdslkd jslkd jlksdj k",
+    //   language: "markdown",
+    //   automaticLayout: true,
+    // });
     monacoDiffEditor = monaco.editor.createDiffEditor(diffEditorContainer, {
       renderSideBySide: true,
       originalEditable: false, // left pane always read-only
-      readOnly: true, // right pane starts read-only; toggled via diffEditToggleBtn
-      automaticLayout: true, // resize when container size changes
+      readOnly: true, // right pane starts read-only
+      automaticLayout: true,
       scrollBeyondLastLine: false,
-      lineNumbers: showLineNumbers ? "on" : "off",
-      minimap: { enabled: false }, // off: gives both panes more width
-      wordWrap: "on", // prevents horizontal scrolling
+      lineNumbers: currentSettings.showLineNumbers ? "on" : "off",
+      minimap: { enabled: currentSettings.showMiniMap },
+      wordWrap: "on",
       theme: getMonacoTheme(),
       fontSize: 13,
+      useShadowDOM: true,
+      smoothScrolling: true,
+      showDeprecated: true,
     });
+
+    // Set models only on first mount
+    monacoDiffEditor.setModel({
+      original: monaco.editor.createModel(meiXML, "xml"),
+      modified: monaco.editor.createModel(meiXML2, "xml"),
+    });
+
+    // Wire up the live-sync listener
+    monacoContentDisposable?.dispose();
+    monacoContentDisposable = monacoDiffEditor
+      .getModifiedEditor()
+      .onDidChangeModelContent(syncFromMonaco);
   } else {
+    // Preserve user edits — only update appearance options
     monacoDiffEditor.updateOptions({
-      lineNumbers: showLineNumbers ? "on" : "off",
+      lineNumbers: currentSettings.showLineNumbers ? "on" : "off",
+      minimap: { enabled: currentSettings.showMiniMap },
     });
     monaco.editor.setTheme(getMonacoTheme());
   }
-
-  // Swap models: dispose the old pair after setting the new one so the editor
-  // never has a null model during the transition.
-  const prevModel = monacoDiffEditor.getModel();
-  monacoDiffEditor.setModel({
-    original: monaco.editor.createModel(meiXML, "xml"),
-    modified: monaco.editor.createModel(meiXML2, "xml"),
-  });
-  prevModel?.original.dispose();
-  prevModel?.modified.dispose();
+  //HACK: For some reason monaco editor x-axis is very offset to the text, need to reset the width
+  setTimeout(() => {
+    const monacoViewLines = document.querySelectorAll(".view-lines");
+    if (!monacoViewLines)
+      console.warn("no view lines found, cannot reset width");
+    for (let i = 0; i < monacoViewLines.length; i++) {
+      (monacoViewLines[i] as HTMLDivElement).style.width = "0px";
+    }
+  }, 0);
 }
 
 // ─── Git diff page (hunked HTML view) ──────────────────────────────────────
@@ -454,13 +545,15 @@ function escapeHTML(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Whether the git diff page is in side-by-side (split) mode. */
-let gitDiffSideBySide = false;
-
 gitDiffSplitToggleBtn.addEventListener("click", () => {
-  gitDiffSideBySide = !gitDiffSideBySide;
-  gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(gitDiffSideBySide));
-  gitDiffSplitToggleBtn.textContent = gitDiffSideBySide ? "Unified" : "Split";
+  const next =
+    currentSettings.gitDiffOrientation === "split" ? "unified" : "split";
+  currentSettings = { ...currentSettings, gitDiffOrientation: next };
+  // Push the change back into the settings panel so the gear UI stays in sync
+  (diffSettingsEl as unknown as { value: DiffSettingsValue }).value =
+    currentSettings;
+  gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(next === "split"));
+  gitDiffSplitToggleBtn.textContent = next === "split" ? "Unified" : "Split";
   renderGitDiffPage();
 });
 
@@ -469,19 +562,14 @@ gitDiffSplitToggleBtn.addEventListener("click", () => {
  *
  * @param line  The diff line to render, or `undefined` for an empty cell
  *              (shown when one side has no paired counterpart).
- * @param side  Which file this cell belongs to (`"old"` or `"new"`).
  */
-function splitCellHTML(line: DiffLine | undefined, side: "old" | "new"): string {
+function splitCellHTML(line: DiffLine | undefined): string {
   if (!line) {
     return `<div class="diff-split-cell diff-line-empty"></div>`;
   }
-  const glyph  = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
-  const lineNo = showLineNumbers
-    ? `<span class="diff-page-gutter diff-line-no">${side === "old" ? (line.oldLineNo ?? "") : (line.newLineNo ?? "")}</span>`
-    : "";
+  const glyph = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
   return (
     `<div class="diff-split-cell diff-line-${line.type}">` +
-    lineNo +
     `<span class="diff-page-gutter">${glyph}</span>` +
     `<span class="diff-page-code">${escapeHTML(line.content)}</span>` +
     `</div>`
@@ -492,20 +580,17 @@ function splitCellHTML(line: DiffLine | undefined, side: "old" | "new"): string 
  * Render one element diff hunk as a unified (single-column) block.
  */
 function unifiedHunkHTML(diff: ElementDiff): string {
-  const linesHTML = diff.lines.map(l => {
-    const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
-    const lineNosHTML = showLineNumbers
-      ? `<span class="diff-page-gutter diff-line-no">${l.oldLineNo ?? ""}</span>` +
-        `<span class="diff-page-gutter diff-line-no">${l.newLineNo ?? ""}</span>`
-      : "";
-    return (
-      `<div class="diff-page-line diff-line-${l.type}">` +
-      lineNosHTML +
-      `<span class="diff-page-gutter">${glyph}</span>` +
-      `<span class="diff-page-code">${escapeHTML(l.content)}</span>` +
-      `</div>`
-    );
-  }).join("");
+  const linesHTML = diff.lines
+    .map((l) => {
+      const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
+      return (
+        `<div class="diff-page-line diff-line-${l.type}">` +
+        `<span class="diff-page-gutter">${glyph}</span>` +
+        `<span class="diff-page-code">${escapeHTML(l.content)}</span>` +
+        `</div>`
+      );
+    })
+    .join("");
   return `<div class="diff-hunk-header">@@ ${diff.label} @@</div>${linesHTML}`;
 }
 
@@ -519,7 +604,7 @@ function unifiedHunkHTML(diff: ElementDiff): string {
 function splitHunkHTML(diff: ElementDiff): string {
   type SplitRow =
     | { kind: "context"; line: DiffLine }
-    | { kind: "change";  remove?: DiffLine; add?: DiffLine };
+    | { kind: "change"; remove?: DiffLine; add?: DiffLine };
 
   // Group consecutive removes and adds into paired change rows
   const rows: SplitRow[] = [];
@@ -531,9 +616,11 @@ function splitHunkHTML(diff: ElementDiff): string {
       i++;
     } else {
       const removes: DiffLine[] = [];
-      const adds: DiffLine[]    = [];
-      while (i < diff.lines.length && diff.lines[i].type === "remove") removes.push(diff.lines[i++]);
-      while (i < diff.lines.length && diff.lines[i].type === "add")    adds.push(diff.lines[i++]);
+      const adds: DiffLine[] = [];
+      while (i < diff.lines.length && diff.lines[i].type === "remove")
+        removes.push(diff.lines[i++]);
+      while (i < diff.lines.length && diff.lines[i].type === "add")
+        adds.push(diff.lines[i++]);
       const len = Math.max(removes.length, adds.length);
       for (let j = 0; j < len; j++) {
         rows.push({ kind: "change", remove: removes[j], add: adds[j] });
@@ -541,33 +628,33 @@ function splitHunkHTML(diff: ElementDiff): string {
     }
   }
 
-  const rowsHTML = rows.map(row => {
-    if (row.kind === "context") {
-      // Context lines: same content duplicated in both cells
-      const lineNoOld = showLineNumbers ? `<span class="diff-page-gutter diff-line-no">${row.line.oldLineNo ?? ""}</span>` : "";
-      const lineNoNew = showLineNumbers ? `<span class="diff-page-gutter diff-line-no">${row.line.newLineNo ?? ""}</span>` : "";
-      const code = escapeHTML(row.line.content);
+  const rowsHTML = rows
+    .map((row) => {
+      if (row.kind === "context") {
+        // Context lines: same content duplicated in both cells
+        const code = escapeHTML(row.line.content);
+        return (
+          `<div class="diff-split-row">` +
+          `<div class="diff-split-cell diff-line-context"><span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
+          `<div class="diff-split-cell diff-line-context"><span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
+          `</div>`
+        );
+      }
       return (
         `<div class="diff-split-row">` +
-        `<div class="diff-split-cell diff-line-context">${lineNoOld}<span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
-        `<div class="diff-split-cell diff-line-context">${lineNoNew}<span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
+        splitCellHTML(row.remove) +
+        splitCellHTML(row.add) +
         `</div>`
       );
-    }
-    return (
-      `<div class="diff-split-row">` +
-      splitCellHTML(row.remove, "old") +
-      splitCellHTML(row.add,    "new") +
-      `</div>`
-    );
-  }).join("");
+    })
+    .join("");
 
   return `<div class="diff-hunk-header">@@ ${diff.label} @@</div>${rowsHTML}`;
 }
 
 /**
  * Render the git diff page in either unified or split mode depending on
- * `gitDiffSideBySide`. Credits first, measures in ascending order.
+ * `currentSettings.gitDiffOrientation`. Credits first, measures in ascending order.
  */
 function renderGitDiffPage(): void {
   if (!xmlDiff || (xmlDiff.measures.size === 0 && xmlDiff.credits.size === 0)) {
@@ -575,7 +662,8 @@ function renderGitDiffPage(): void {
     return;
   }
 
-  const hunkFn = gitDiffSideBySide ? splitHunkHTML : unifiedHunkHTML;
+  const isSplit = currentSettings.gitDiffOrientation === "split";
+  const hunkFn = isSplit ? splitHunkHTML : unifiedHunkHTML;
 
   const creditHunks = [...xmlDiff.credits.entries()]
     .sort(([a], [b]) => a - b)
@@ -590,7 +678,7 @@ function renderGitDiffPage(): void {
   gitDiffHunksEl.innerHTML = creditHunks + measureHunks;
 
   // Toggle the CSS class on the container so styles can target each mode
-  gitDiffHunksEl.classList.toggle("is-split", gitDiffSideBySide);
+  gitDiffHunksEl.classList.toggle("is-split", isSplit);
 }
 
 // ─── View toggle ───────────────────────────────────────────────────────────
@@ -612,21 +700,23 @@ let activeView: View = "notation";
 function switchView(target: View): void {
   activeView = activeView === target ? "notation" : target;
 
-  const isMonaco  = activeView === "monaco";
+  const isMonaco = activeView === "monaco";
   const isGitDiff = activeView === "gitdiff";
   const isNotation = activeView === "notation";
 
   // Update toolbar button pressed states
-  viewToggleBtn.setAttribute("aria-pressed",    String(isMonaco));
+  viewToggleBtn.setAttribute("aria-pressed", String(isMonaco));
   gitDiffToggleBtn.setAttribute("aria-pressed", String(isGitDiff));
 
   // Show/hide the notation panels
-  notationSections.forEach(el => { if (el) el.style.display = isNotation ? "" : "none"; });
+  notationSections.forEach((el) => {
+    if (el) el.style.display = isNotation ? "" : "none";
+  });
 
   // Monaco diff page
   if (isMonaco) {
     diffPageEl.classList.add("visible");
-    renderDiffPage();
+    renderCodeDiffPage();
     // One rAF so Monaco can measure the now-visible container
     requestAnimationFrame(() => monacoDiffEditor?.layout());
   } else {
@@ -642,7 +732,7 @@ function switchView(target: View): void {
   }
 }
 
-viewToggleBtn.addEventListener("click",    () => switchView("monaco"));
+viewToggleBtn.addEventListener("click", () => switchView("monaco"));
 gitDiffToggleBtn.addEventListener("click", () => switchView("gitdiff"));
 
 // ─── Scale event listeners ─────────────────────────────────────────────────
@@ -700,14 +790,13 @@ scale2Input.addEventListener("input", () => {
  * {@link DiffSettingsValue} detail containing the new option values.
  */
 diffSettingsEl.addEventListener("settings-change", (e) => {
-  const settings = (e as CustomEvent<DiffSettingsValue>).detail;
-  diffOpts = {
-    contextLines: settings.contextLines,
-    ignoreWhitespace: settings.ignoreWhitespace,
-    algorithm: settings.algorithm,
-  };
-  showLineNumbers = settings.showLineNumbers;
-  runDiff(diffOpts);
+  currentSettings = (e as CustomEvent<DiffSettingsValue>).detail;
+  // Sync the split toggle button label with the orientation from settings
+  const isSplit = currentSettings.gitDiffOrientation === "split";
+  gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(isSplit));
+  gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
+  runDiff(currentSettings);
+  if (activeView === "monaco") renderCodeDiffPage();
 });
 
 // ─── Page-change listeners ─────────────────────────────────────────────────

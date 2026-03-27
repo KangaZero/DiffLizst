@@ -12,22 +12,12 @@
  */
 
 /** A single line in a unified diff output. */
-export type DiffLineType = 'add' | 'remove' | 'context';
+export type DiffLineType = "add" | "remove" | "context";
 
 export type DiffLine = {
   type: DiffLineType;
   /** Raw text content of the line (no leading `+`/`-`/` ` prefix). */
   content: string;
-  /**
-   * 1-based line number in the old (left) file.
-   * Present on `'remove'` and `'context'` lines; absent on `'add'` lines.
-   */
-  oldLineNo?: number;
-  /**
-   * 1-based line number in the new (right) file.
-   * Present on `'add'` and `'context'` lines; absent on `'remove'` lines.
-   */
-  newLineNo?: number;
 };
 
 /**
@@ -37,7 +27,7 @@ export type DiffLine = {
  * can be rendered directly as a tooltip without further processing.
  */
 export type ElementDiff = {
-  changeType: 'add' | 'remove' | 'change';
+  changeType: "add" | "remove" | "change";
   /** Human-readable label shown in the tooltip header, e.g. `"measure 5"`. */
   label: string;
   lines: DiffLine[];
@@ -58,7 +48,7 @@ export type XMLDiffResult = {
  * Options that control how the diff is computed.
  * Conceptually mirrors the flags you would pass to `git diff`.
  */
-export type DiffOptions = {
+export type XMLDiffOptions = {
   /**
    * Number of unchanged lines to include above and below each changed block.
    * Equivalent to `git diff -U<n>`. Default: `2`.
@@ -75,14 +65,7 @@ export type DiffOptions = {
    * browser LCS path. Stored here so the settings panel can persist the
    * value for future git mode support.
    */
-  algorithm: 'patience' | 'histogram' | 'myers';
-};
-
-/** Sensible defaults that mirror `git diff -U2 -w --patience`. */
-export const DEFAULT_DIFF_OPTIONS: DiffOptions = {
-  contextLines: 2,
-  ignoreWhitespace: true,
-  algorithm: 'patience',
+  algorithm: "patience" | "histogram" | "myers";
 };
 
 // ─── LCS implementation ────────────────────────────────────────────────────
@@ -99,7 +82,9 @@ export const DEFAULT_DIFF_OPTIONS: DiffOptions = {
 function buildLCSTable(a: string[], b: string[]): number[][] {
   const m = a.length;
   const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    new Array(n + 1).fill(0),
+  );
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       dp[i][j] =
@@ -126,14 +111,14 @@ function diffLines(oldLines: string[], newLines: string[]): DiffLine[] {
 
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
-      result.unshift({ type: 'context', content: oldLines[i - 1] });
+      result.unshift({ type: "context", content: oldLines[i - 1] });
       i--;
       j--;
     } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      result.unshift({ type: 'add', content: newLines[j - 1] });
+      result.unshift({ type: "add", content: newLines[j - 1] });
       j--;
     } else {
-      result.unshift({ type: 'remove', content: oldLines[i - 1] });
+      result.unshift({ type: "remove", content: oldLines[i - 1] });
       i--;
     }
   }
@@ -154,7 +139,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffLine[] {
 function trimContext(lines: DiffLine[], context: number): DiffLine[] {
   const changedIndices = new Set<number>();
   lines.forEach((l, i) => {
-    if (l.type !== 'context') changedIndices.add(i);
+    if (l.type !== "context") changedIndices.add(i);
   });
 
   if (changedIndices.size === 0) return [];
@@ -162,7 +147,11 @@ function trimContext(lines: DiffLine[], context: number): DiffLine[] {
   // Expand each changed index by ±context
   const keep = new Set<number>();
   for (const idx of changedIndices) {
-    for (let k = Math.max(0, idx - context); k <= Math.min(lines.length - 1, idx + context); k++) {
+    for (
+      let k = Math.max(0, idx - context);
+      k <= Math.min(lines.length - 1, idx + context);
+      k++
+    ) {
       keep.add(k);
     }
   }
@@ -172,7 +161,7 @@ function trimContext(lines: DiffLine[], context: number): DiffLine[] {
   for (const idx of [...keep].sort((a, b) => a - b)) {
     if (prev !== -1 && idx > prev + 1) {
       // Indicate skipped lines between two kept ranges
-      result.push({ type: 'context', content: '...' });
+      result.push({ type: "context", content: "..." });
     }
     result.push(lines[idx]);
     prev = idx;
@@ -190,7 +179,7 @@ function trimContext(lines: DiffLine[], context: number): DiffLine[] {
  * original content (including whitespace) is preserved in the output so the
  * tooltip still shows the raw XML.
  */
-function normaliseLine(line: string, opts: DiffOptions): string {
+function normaliseLine(line: string, opts: XMLDiffOptions): string {
   return opts.ignoreWhitespace ? line.trim() : line;
 }
 
@@ -206,41 +195,36 @@ function elementDiff(
   old: Element,
   next: Element,
   label: string,
-  opts: DiffOptions,
+  opts: XMLDiffOptions,
 ): ElementDiff | null {
   const s1 = new XMLSerializer().serializeToString(old);
   const s2 = new XMLSerializer().serializeToString(next);
   if (s1 === s2) return null;
 
   // Keep original lines for display but normalise for comparison
-  const rawLines1 = s1.split('\n').map(l => l.trimEnd());
-  const rawLines2 = s2.split('\n').map(l => l.trimEnd());
-  const normLines1 = rawLines1.map(l => normaliseLine(l, opts));
-  const normLines2 = rawLines2.map(l => normaliseLine(l, opts));
+  const rawLines1 = s1.split("\n").map((l) => l.trimEnd());
+  const rawLines2 = s2.split("\n").map((l) => l.trimEnd());
+  const normLines1 = rawLines1.map((l) => normaliseLine(l, opts));
+  const normLines2 = rawLines2.map((l) => normaliseLine(l, opts));
 
   // Diff on normalised lines, then map result back to original content
   const normalised = diffLines(normLines1, normLines2);
-  let r1 = 0;        // raw index pointer for old lines
-  let r2 = 0;        // raw index pointer for new lines
-  let oldLineNo = 1; // 1-based line counter for the old file
-  let newLineNo = 1; // 1-based line counter for the new file
-  const withRaw: DiffLine[] = normalised.map(dl => {
-    if (dl.type === 'remove') return { type: 'remove', content: rawLines1[r1++], oldLineNo: oldLineNo++ };
-    if (dl.type === 'add')    return { type: 'add',    content: rawLines2[r2++], newLineNo: newLineNo++ };
-    // Context lines: show raw content from the old file (not the normalised string)
-    // so that the original indentation is preserved in the tooltip.
-    const content = rawLines1[r1++];
+  let r1 = 0; // raw index pointer for old lines
+  let r2 = 0; // raw index pointer for new lines
+  const withRaw: DiffLine[] = normalised.map((dl) => {
+    if (dl.type === "remove")
+      return { type: "remove", content: rawLines1[r1++] };
+    if (dl.type === "add") return { type: "add", content: rawLines2[r2++] };
+    r1++;
     r2++;
-    return { type: 'context', content, oldLineNo: oldLineNo++, newLineNo: newLineNo++ };
+    return { type: "context", content: dl.content };
   });
 
-  const trimmed = trimContext(withRaw, opts.contextLines);
-  // If trimmed is empty every remaining line is context, meaning the only
-  // differences were whitespace and ignoreWhitespace absorbed them — treat
-  // this element as unchanged so no overlay is shown.
-  if (trimmed.length === 0) return null;
-
-  return { changeType: 'change', label, lines: trimmed };
+  return {
+    changeType: "change",
+    label,
+    lines: trimContext(withRaw, opts.contextLines),
+  };
 }
 
 /**
@@ -252,18 +236,13 @@ function elementDiff(
 function singleSideDiff(
   el: Element,
   label: string,
-  changeType: 'add' | 'remove',
+  changeType: "add" | "remove",
 ): ElementDiff {
   const lines = new XMLSerializer()
     .serializeToString(el)
-    .split('\n')
-    .filter(l => l.trim())
-    .map((l, i): DiffLine => ({
-      type: changeType,
-      content: l,
-      // Add lines carry new-file numbers; remove lines carry old-file numbers.
-      ...(changeType === 'remove' ? { oldLineNo: i + 1 } : { newLineNo: i + 1 }),
-    }));
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => ({ type: changeType, content: l }));
   return { changeType, label, lines };
 }
 
@@ -280,7 +259,7 @@ function singleSideDiff(
  *
  * @param xml1  Raw MusicXML string for the "old" (left) score.
  * @param xml2  Raw MusicXML string for the "new" (right) score.
- * @param opts  Diff behaviour options. Defaults to {@link DEFAULT_DIFF_OPTIONS}.
+ * @param opts  Diff behaviour options.
  *
  * @example
  * ```ts
@@ -293,11 +272,11 @@ function singleSideDiff(
 export function diffXML(
   xml1: string,
   xml2: string,
-  opts: DiffOptions = DEFAULT_DIFF_OPTIONS,
+  opts: XMLDiffOptions,
 ): XMLDiffResult {
   const parser = new DOMParser();
-  const doc1 = parser.parseFromString(xml1, 'application/xml');
-  const doc2 = parser.parseFromString(xml2, 'application/xml');
+  const doc1 = parser.parseFromString(xml1, "application/xml");
+  const doc2 = parser.parseFromString(xml2, "application/xml");
 
   const measures = new Map<number, ElementDiff>();
   const credits = new Map<number, ElementDiff>();
@@ -307,12 +286,16 @@ export function diffXML(
   const measureMap1 = new Map<number, Element>();
   const measureMap2 = new Map<number, Element>();
 
-  doc1.querySelectorAll('measure').forEach(m =>
-    measureMap1.set(parseInt(m.getAttribute('number') ?? '0', 10), m),
-  );
-  doc2.querySelectorAll('measure').forEach(m =>
-    measureMap2.set(parseInt(m.getAttribute('number') ?? '0', 10), m),
-  );
+  doc1
+    .querySelectorAll("measure")
+    .forEach((m) =>
+      measureMap1.set(parseInt(m.getAttribute("number") ?? "0", 10), m),
+    );
+  doc2
+    .querySelectorAll("measure")
+    .forEach((m) =>
+      measureMap2.set(parseInt(m.getAttribute("number") ?? "0", 10), m),
+    );
 
   for (const num of new Set([...measureMap1.keys(), ...measureMap2.keys()])) {
     const m1 = measureMap1.get(num);
@@ -322,16 +305,16 @@ export function diffXML(
       const d = elementDiff(m1, m2, `measure ${num}`, opts);
       if (d) measures.set(num, d);
     } else if (m1) {
-      measures.set(num, singleSideDiff(m1, `measure ${num}`, 'remove'));
+      measures.set(num, singleSideDiff(m1, `measure ${num}`, "remove"));
     } else if (m2) {
-      measures.set(num, singleSideDiff(m2, `measure ${num}`, 'add'));
+      measures.set(num, singleSideDiff(m2, `measure ${num}`, "add"));
     }
   }
 
   // ── Credits ───────────────────────────────────────────────────────────
   // Matched by position — credits have no stable identity attribute.
-  const credits1 = Array.from(doc1.querySelectorAll('credit'));
-  const credits2 = Array.from(doc2.querySelectorAll('credit'));
+  const credits1 = Array.from(doc1.querySelectorAll("credit"));
+  const credits2 = Array.from(doc2.querySelectorAll("credit"));
 
   for (let i = 0; i < Math.max(credits1.length, credits2.length); i++) {
     const c1 = credits1[i];
@@ -341,9 +324,9 @@ export function diffXML(
       const d = elementDiff(c1, c2, `credit ${i}`, opts);
       if (d) credits.set(i, d);
     } else if (c1) {
-      credits.set(i, singleSideDiff(c1, `credit ${i}`, 'remove'));
+      credits.set(i, singleSideDiff(c1, `credit ${i}`, "remove"));
     } else if (c2) {
-      credits.set(i, singleSideDiff(c2, `credit ${i}`, 'add'));
+      credits.set(i, singleSideDiff(c2, `credit ${i}`, "add"));
     }
   }
 

@@ -1,3 +1,4 @@
+import type { XMLDiffOptions } from "@/utils/diffXML";
 /**
  * `<diff-settings>` Web Component
  *
@@ -36,20 +37,24 @@
  * the app is running in git-backed CLI mode (Bun).  It has no effect on the
  * browser LCS diff path.
  */
-export type DiffSettingsValue = {
-  contextLines: number;
-  ignoreWhitespace: boolean;
-  algorithm: 'patience' | 'histogram' | 'myers';
+export type DiffSettingsValue = XMLDiffOptions & {
+  // contextLines: number;
+  // ignoreWhitespace: boolean;
+  // algorithm: "patience" | "histogram" | "myers";
   /** When `true`, line numbers are rendered alongside each diff line. Default: `true`. */
   showLineNumbers: boolean;
+  showMiniMap: boolean;
+  gitDiffOrientation: "split" | "unified";
 };
 
 /** Default values shown when the component first renders. */
-const DEFAULTS: DiffSettingsValue = {
+export const DEFAULT_SETTINGS: DiffSettingsValue = {
   contextLines: 2,
   ignoreWhitespace: true,
-  algorithm: 'patience',
+  algorithm: "patience",
   showLineNumbers: true,
+  showMiniMap: false,
+  gitDiffOrientation: "split",
 };
 
 // Gear icon (Lucide `settings-2` path, MIT licensed)
@@ -61,7 +66,7 @@ const GEAR_SVG = `
     <circle cx="12" cy="12" r="3"/>
   </svg>`;
 
-const template = document.createElement('template');
+const template = document.createElement("template");
 template.innerHTML = `
 <style>
   :host {
@@ -213,7 +218,7 @@ template.innerHTML = `
       <label for="ctx-lines">Context lines</label>
       <span class="hint">Lines shown around each change (git -U&lt;n&gt;)</span>
     </div>
-    <input id="ctx-lines" type="number" min="0" max="10" value="${DEFAULTS.contextLines}" />
+    <input id="ctx-lines" type="number" min="0" max="10" value="${DEFAULT_SETTINGS.contextLines}" />
   </div>
 
   <div class="row">
@@ -221,7 +226,7 @@ template.innerHTML = `
       <label for="ignore-ws">Ignore whitespace</label>
       <span class="hint">Strip leading/trailing spaces (git -w)</span>
     </div>
-    <input id="ignore-ws" type="checkbox" ${DEFAULTS.ignoreWhitespace ? 'checked' : ''} />
+    <input id="ignore-ws" type="checkbox" ${DEFAULT_SETTINGS.ignoreWhitespace ? "checked" : ""} />
   </div>
 
   <div class="row">
@@ -229,20 +234,35 @@ template.innerHTML = `
       <label for="show-line-nos">Show line numbers</label>
       <span class="hint">Display line numbers in diff view &amp; tooltip</span>
     </div>
-    <input id="show-line-nos" type="checkbox" ${DEFAULTS.showLineNumbers ? 'checked' : ''} />
+    <input id="show-line-nos" type="checkbox" ${DEFAULT_SETTINGS.showLineNumbers ? "checked" : ""} />
   </div>
-
+<div class="row">
+    <div class="label-wrap">
+      <label for="show-mini-map">Show Mini Map</label>
+      <span class="hint">Display mini map in the raw editor</span>
+    </div>
+    <input id="show-mini-map" type="checkbox" ${DEFAULT_SETTINGS.showMiniMap ? "checked" : ""} />
+  </div>
+<div class="row">
+    <div class="label-wrap">
+      <label for="git-diff-orientation">Git Diff Orientation</label>
+      <span class="hint">Choose the git diff orientation</span>
+    </div>
+<select id="git-diff-orientation">
+      <option value="split" ${DEFAULT_SETTINGS.gitDiffOrientation === "split" ? "selected" : ""}>split</option>
+      <option value="unified" ${DEFAULT_SETTINGS.gitDiffOrientation === "unified" ? "selected" : ""}>unified</option>
+    </select>
+  </div>
   <div class="section-divider"></div>
-
   <div class="row">
     <div class="label-wrap">
       <label for="algorithm">Algorithm</label>
       <span class="hint">Git mode only (no effect in browser)</span>
     </div>
     <select id="algorithm">
-      <option value="patience" ${DEFAULTS.algorithm === 'patience'  ? 'selected' : ''}>patience</option>
-      <option value="histogram" ${DEFAULTS.algorithm === 'histogram' ? 'selected' : ''}>histogram</option>
-      <option value="myers"    ${DEFAULTS.algorithm === 'myers'    ? 'selected' : ''}>myers</option>
+      <option value="patience" ${DEFAULT_SETTINGS.algorithm === "patience" ? "selected" : ""}>patience</option>
+      <option value="histogram" ${DEFAULT_SETTINGS.algorithm === "histogram" ? "selected" : ""}>histogram</option>
+      <option value="myers"    ${DEFAULT_SETTINGS.algorithm === "myers" ? "selected" : ""}>myers</option>
     </select>
   </div>
 </div>
@@ -253,8 +273,10 @@ export class DiffSettings extends HTMLElement {
   private _panel!: HTMLDivElement;
   private _ctxInput!: HTMLInputElement;
   private _wsInput!: HTMLInputElement;
-  private _algoSelect!: HTMLSelectElement;
   private _lineNosInput!: HTMLInputElement;
+  private _miniMapInput!: HTMLInputElement;
+  private _gitDiffOrientationSelect!: HTMLSelectElement;
+  private _algoSelect!: HTMLSelectElement;
 
   /** Bound reference kept so the listener can be removed on disconnect. */
   private _onOutsideClick = (e: MouseEvent) => {
@@ -263,64 +285,88 @@ export class DiffSettings extends HTMLElement {
 
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
-    this.shadowRoot!.appendChild(template.content.cloneNode(true));
+    this.attachShadow({ mode: "open" });
+    if (!this.shadowRoot) console.error("No shadowRoot detected");
+    this.shadowRoot?.appendChild(template.content.cloneNode(true));
 
-    this._trigger      = this.shadowRoot!.querySelector('.trigger')!;
-    this._panel        = this.shadowRoot!.querySelector('.panel')!;
-    this._ctxInput     = this.shadowRoot!.querySelector('#ctx-lines')!;
-    this._wsInput      = this.shadowRoot!.querySelector('#ignore-ws')!;
-    this._algoSelect   = this.shadowRoot!.querySelector('#algorithm')!;
-    this._lineNosInput = this.shadowRoot!.querySelector('#show-line-nos')!;
+    this._trigger = this.shadowRoot?.querySelector(".trigger")!;
+    this._panel = this.shadowRoot?.querySelector(".panel")!;
+    this._ctxInput = this.shadowRoot?.querySelector("#ctx-lines")!;
+    this._wsInput = this.shadowRoot?.querySelector("#ignore-ws")!;
+    this._lineNosInput = this.shadowRoot?.querySelector("#show-line-nos")!;
+    this._miniMapInput = this.shadowRoot?.querySelector("#show-mini-map")!;
+    this._gitDiffOrientationSelect = this.shadowRoot?.querySelector(
+      "#git-diff-orientation",
+    )!;
+    this._algoSelect = this.shadowRoot?.querySelector("#algorithm")!;
   }
 
   connectedCallback() {
-    this._trigger.addEventListener('click', () => this._toggle());
+    this._trigger.addEventListener("click", () => this._toggle());
 
     // Emit on any control change so the parent re-runs the diff immediately
-    this._ctxInput.addEventListener('input',    () => this._emit());
-    this._wsInput.addEventListener('change',    () => this._emit());
-    this._algoSelect.addEventListener('change', () => this._emit());
-    this._lineNosInput.addEventListener('change', () => this._emit());
-
+    this._ctxInput.addEventListener("input", () => this._emit());
+    this._wsInput.addEventListener("change", () => this._emit());
+    this._miniMapInput.addEventListener("change", () => this._emit());
+    this._algoSelect.addEventListener("change", () => this._emit());
+    this._lineNosInput.addEventListener("change", () => this._emit());
+    this._gitDiffOrientationSelect.addEventListener("change", () =>
+      this._emit(),
+    );
     // Close when user clicks outside the component
-    document.addEventListener('click', this._onOutsideClick);
+    document.addEventListener("click", this._onOutsideClick);
 
     // Close on Escape key
-    this.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Escape') this._close();
+    this.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Escape") this._close();
     });
   }
 
   disconnectedCallback() {
-    document.removeEventListener('click', this._onOutsideClick);
+    document.removeEventListener("click", this._onOutsideClick);
+  }
+
+  /** Push new values into all controls without firing a change event. */
+  set value(v: DiffSettingsValue) {
+    this._ctxInput.value = String(v.contextLines);
+    this._wsInput.checked = v.ignoreWhitespace;
+    this._algoSelect.value = v.algorithm;
+    this._lineNosInput.checked = v.showLineNumbers;
+    this._miniMapInput.checked = v.showMiniMap;
+    this._gitDiffOrientationSelect.value = v.gitDiffOrientation;
   }
 
   /** Current snapshot of all settings. */
   get value(): DiffSettingsValue {
     return {
-      contextLines:     Math.max(0, Math.min(10, Number(this._ctxInput.value) || 0)),
+      contextLines: Math.max(
+        0,
+        Math.min(10, Number(this._ctxInput.value) || 0),
+      ),
       ignoreWhitespace: this._wsInput.checked,
-      algorithm:        this._algoSelect.value as DiffSettingsValue['algorithm'],
-      showLineNumbers:  this._lineNosInput.checked,
+      algorithm: this._algoSelect.value as DiffSettingsValue["algorithm"],
+      showMiniMap: this._miniMapInput.checked,
+      gitDiffOrientation: this._gitDiffOrientationSelect
+        .value as DiffSettingsValue["gitDiffOrientation"],
+      showLineNumbers: this._lineNosInput.checked,
     };
   }
 
   /** Open the settings panel. */
   private _open() {
-    this._panel.classList.add('open');
-    this._trigger.setAttribute('aria-expanded', 'true');
+    this._panel.classList.add("open");
+    this._trigger.setAttribute("aria-expanded", "true");
   }
 
   /** Close the settings panel. */
   private _close() {
-    this._panel.classList.remove('open');
-    this._trigger.setAttribute('aria-expanded', 'false');
+    this._panel.classList.remove("open");
+    this._trigger.setAttribute("aria-expanded", "false");
   }
 
   /** Toggle open/closed state. */
   private _toggle() {
-    this._panel.classList.contains('open') ? this._close() : this._open();
+    this._panel.classList.contains("open") ? this._close() : this._open();
   }
 
   /**
@@ -329,7 +375,7 @@ export class DiffSettings extends HTMLElement {
    */
   private _emit() {
     this.dispatchEvent(
-      new CustomEvent<DiffSettingsValue>('settings-change', {
+      new CustomEvent<DiffSettingsValue>("settings-change", {
         detail: this.value,
         bubbles: true,
         composed: true, // crosses shadow DOM boundary
@@ -338,4 +384,4 @@ export class DiffSettings extends HTMLElement {
   }
 }
 
-customElements.define('diff-settings', DiffSettings);
+customElements.define("diff-settings", DiffSettings);
