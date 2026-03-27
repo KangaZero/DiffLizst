@@ -24,7 +24,7 @@
  * overlays are removed.
  */
 
-import type { ElementDiff, XMLDiffResult } from "./diffXML";
+import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "./diffXML";
 
 /** Singleton tooltip element shared across all overlays. */
 let tooltipEl: HTMLDivElement | null = null;
@@ -177,6 +177,47 @@ function createOverlay(
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
+ * Build a map from Verovio SVG element id → {@link ChildDiffKey} for
+ * `<note>` and `<rest>` children within each measure.
+ *
+ * Direction mirrors {@link buildMeasureIdMap} (svgId → lookup key) so that
+ * {@link applyDiffHighlights} can iterate SVG elements on the current page
+ * and resolve their diff key in O(1) — exactly the same pattern used for
+ * measure-level overlays.
+ *
+ * Only notes and rests are mapped because they are the only MusicXML child
+ * types that Verovio gives a stable, queryable SVG `id`.  Other child types
+ * (attributes, directions, etc.) still appear in the git diff tooltip but
+ * cannot be highlighted with an SVG overlay.
+ *
+ * @param toolkit An initialised Verovio toolkit with data already loaded.
+ */
+export function buildChildIdMap(toolkit: {
+  getMEI(opts?: { pageNo?: number; scoreBased?: boolean }): string;
+}): Map<string, ChildDiffKey> {
+  const map = new Map<string, ChildDiffKey>();
+  try {
+    const mei = toolkit.getMEI({ pageNo: 0, scoreBased: true });
+    const doc = new DOMParser().parseFromString(mei, "application/xml");
+    doc.querySelectorAll("measure").forEach((measure) => {
+      const n = measure.getAttribute("n");
+      if (!n) return;
+      // Index notes and rests separately so keys match the tag-grouped keys
+      // produced by diffChildrenByTag in diffXML ("${n}-note-${i}", etc.)
+      (["note", "rest"] as const).forEach((tag) => {
+        Array.from(measure.querySelectorAll(tag)).forEach((el, idx) => {
+          const id = el.getAttribute("xml:id");
+          if (id) map.set(id, `${n}-${tag}-${idx}` as ChildDiffKey);
+        });
+      });
+    });
+  } catch (err) {
+    console.warn("[buildChildIdMap] Could not parse MEI:", err);
+  }
+  return map;
+}
+
+/**
  * Build a map from Verovio SVG element id → MusicXML measure number by
  * parsing the MEI document that the toolkit internally holds.
  *
@@ -200,9 +241,9 @@ function createOverlay(
  * applyDiffHighlights(c1, c2, diff, idMap1, idMap2);
  * ```
  */
-export function buildMeasureIdMap(
-  toolkit: { getMEI(opts?: { pageNo?: number; scoreBased?: boolean }): string },
-): Map<string, number> {
+export function buildMeasureIdMap(toolkit: {
+  getMEI(opts?: { pageNo?: number; scoreBased?: boolean }): string;
+}): Map<string, number> {
   const map = new Map<string, number>();
   try {
     // pageNo: 0 → full document; scoreBased: true → clean element order
@@ -250,6 +291,8 @@ export function applyDiffHighlights(
   diff: XMLDiffResult,
   measureIdToNum1: Map<string, number>,
   measureIdToNum2: Map<string, number>,
+  svgToChildKey1: Map<string, ChildDiffKey>,
+  svgToChildKey2: Map<string, ChildDiffKey>,
   showLineNumbers = true,
 ): void {
   // Remove stale overlays from the previous render
@@ -257,6 +300,7 @@ export function applyDiffHighlights(
     c.querySelectorAll(".diff-overlay").forEach((el) => el.remove()),
   );
 
+  console.log("diff", diff);
   // ── Measures ──────────────────────────────────────────────────────────
   // Iterate only the g.measure elements present in the current page's SVG.
   // Each is resolved to its measure number via the id map — this correctly
@@ -303,4 +347,30 @@ export function applyDiffHighlights(
       container2.appendChild(createOverlay(t2, container2, d, showLineNumbers));
     }
   }
+
+  // ── Part Lists (Instrument Name) ─────────────────────────────────────────
+  // Verovio renders <credit> content as <text> elements inside g.pgHead.
+  // Only present on page 1 — on other pages querySelector returns null and
+  // texts arrays are empty, making the loop below a safe no-op.
+
+  // ── Detailed child diffs (note / rest level) ───────────────────────────
+  // Mirrors the measure overlay approach: iterate SVG elements on the current
+  // page, resolve their diff key from the reverse map, then look up the diff.
+  // Only notes and rests have stable Verovio SVG ids; other child types
+  // (attributes, directions, etc.) still appear in the git diff / tooltip.
+  container1.querySelectorAll<SVGGElement>("g.note, g.rest").forEach((el) => {
+    const key = svgToChildKey1.get(el.getAttribute("id") ?? "");
+    if (!key) return;
+    const d = diff.children.get(key);
+    if (!d || d.changeType === "add") return;
+    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
+  });
+
+  container2.querySelectorAll<SVGGElement>("g.note, g.rest").forEach((el) => {
+    const key = svgToChildKey2.get(el.getAttribute("id") ?? "");
+    if (!key) return;
+    const d = diff.children.get(key);
+    if (!d || d.changeType === "remove") return;
+    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
+  });
 }

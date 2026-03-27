@@ -15,6 +15,7 @@ const DEFAULT_DIFF_OPTIONS: XMLDiffOptions = {
   contextLines: 2,
   ignoreWhitespace: true,
   algorithm: "patience",
+  detailedDiff: false,
 };
 
 // ─── Minimal XML fixtures ─────────────────────────────────────────────────

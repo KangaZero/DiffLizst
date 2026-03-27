@@ -45,6 +45,9 @@ export type DiffSettingsValue = XMLDiffOptions & {
   showLineNumbers: boolean;
   showMiniMap: boolean;
   gitDiffOrientation: "split" | "unified";
+  /** When `true`, diffs each direct child tag within a measure individually
+   *  instead of treating the whole measure as one unit. Default: `false`. */
+  detailedDiff: boolean;
 };
 
 /** Default values shown when the component first renders. */
@@ -55,6 +58,7 @@ export const DEFAULT_SETTINGS: DiffSettingsValue = {
   showLineNumbers: true,
   showMiniMap: false,
   gitDiffOrientation: "split",
+  detailedDiff: false,
 };
 
 // Gear icon (Lucide `settings-2` path, MIT licensed)
@@ -245,6 +249,13 @@ template.innerHTML = `
   </div>
 <div class="row">
     <div class="label-wrap">
+      <label for="detailed-diff">Detailed Diff</label>
+      <span class="hint">Diff per tag inside each measure</span>
+    </div>
+    <input id="detailed-diff" type="checkbox" ${DEFAULT_SETTINGS.detailedDiff ? "checked" : ""} />
+  </div>
+<div class="row">
+    <div class="label-wrap">
       <label for="git-diff-orientation">Git Diff Orientation</label>
       <span class="hint">Choose the git diff orientation</span>
     </div>
@@ -275,6 +286,7 @@ export class DiffSettings extends HTMLElement {
   private _wsInput!: HTMLInputElement;
   private _lineNosInput!: HTMLInputElement;
   private _miniMapInput!: HTMLInputElement;
+  private _detailedDiffInput!: HTMLInputElement;
   private _gitDiffOrientationSelect!: HTMLSelectElement;
   private _algoSelect!: HTMLSelectElement;
 
@@ -295,6 +307,7 @@ export class DiffSettings extends HTMLElement {
     this._wsInput = this.shadowRoot?.querySelector("#ignore-ws")!;
     this._lineNosInput = this.shadowRoot?.querySelector("#show-line-nos")!;
     this._miniMapInput = this.shadowRoot?.querySelector("#show-mini-map")!;
+    this._detailedDiffInput = this.shadowRoot?.querySelector("#detailed-diff")!;
     this._gitDiffOrientationSelect = this.shadowRoot?.querySelector(
       "#git-diff-orientation",
     )!;
@@ -308,6 +321,7 @@ export class DiffSettings extends HTMLElement {
     this._ctxInput.addEventListener("input", () => this._emit());
     this._wsInput.addEventListener("change", () => this._emit());
     this._miniMapInput.addEventListener("change", () => this._emit());
+    this._detailedDiffInput.addEventListener("change", () => this._emit());
     this._algoSelect.addEventListener("change", () => this._emit());
     this._lineNosInput.addEventListener("change", () => this._emit());
     this._gitDiffOrientationSelect.addEventListener("change", () =>
@@ -334,6 +348,7 @@ export class DiffSettings extends HTMLElement {
     this._lineNosInput.checked = v.showLineNumbers;
     this._miniMapInput.checked = v.showMiniMap;
     this._gitDiffOrientationSelect.value = v.gitDiffOrientation;
+    this._detailedDiffInput.checked = v.detailedDiff;
   }
 
   /** Current snapshot of all settings. */
@@ -349,6 +364,7 @@ export class DiffSettings extends HTMLElement {
       gitDiffOrientation: this._gitDiffOrientationSelect
         .value as DiffSettingsValue["gitDiffOrientation"],
       showLineNumbers: this._lineNosInput.checked,
+      detailedDiff: this._detailedDiffInput.checked,
     };
   }
 

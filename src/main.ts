@@ -26,10 +26,12 @@ import {
   type XMLDiffResult,
   type ElementDiff,
   type DiffLine,
+  type ChildDiffKey,
 } from "@/utils/diffXML";
 import {
   applyDiffHighlights,
   buildMeasureIdMap,
+  buildChildIdMap,
 } from "@/utils/applyDiffHighlights";
 
 // ─── Monaco editor ────────────────────────────────────────────────────────
@@ -54,7 +56,8 @@ import { type VerovioOptions, toolkit as Toolkit } from "verovio";
 // @ts-ignore: raw import as string
 import etudeMei from "@/scores/Chopin/etudeOp10No1.xml?raw";
 // @ts-ignore: raw import as string
-import etudeMei2 from "@/scores/Chopin/etudeOp10No2.xml?raw";
+import etudeMei2 from "@/scores/Chopin/etudeOp10No1.xml?raw";
+// import etudeMei2 from "@/scores/Chopin/etudeOp10No2.xml?raw";
 
 import type { Pages } from "./components/pages";
 import {
@@ -265,8 +268,8 @@ notationPanel2.prepend(paginationEl2);
 
 // type Theme = "light" | "dark";
 
-let meiXML: string | null = null;
-let meiXML2: string | null = null;
+let originalXML: string | null = null;
+let xMLToCompare: string | null = null;
 let toolkit: Toolkit | null = null;
 let toolkit2: Toolkit | null = null;
 
@@ -283,6 +286,8 @@ let currentSettings: DiffSettingsValue = { ...DEFAULT_SETTINGS };
  */
 let measureIdMap1 = new Map<string, number>();
 let measureIdMap2 = new Map<string, number>();
+let childIdMap1 = new Map<string, ChildDiffKey>();
+let childIdMap2 = new Map<string, ChildDiffKey>();
 // ─── Theme ─────────────────────────────────────────────────────────────────
 const themeStorageKey = "theme-preference";
 const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -359,6 +364,8 @@ function reapplyDiff(): void {
     xmlDiff,
     measureIdMap1,
     measureIdMap2,
+    childIdMap1,
+    childIdMap2,
     currentSettings.showLineNumbers,
   );
 }
@@ -372,8 +379,9 @@ function reapplyDiff(): void {
  * @param opts Diff options; defaults to the last options set by the user.
  */
 function runDiff(opts: XMLDiffOptions = currentSettings): void {
-  if (!meiXML || !meiXML2) return;
-  xmlDiff = diffXML(meiXML, meiXML2, opts);
+  if (!originalXML || !xMLToCompare) return;
+  xmlDiff = diffXML(originalXML, xMLToCompare, opts);
+  console.log(xmlDiff, "xmlDiff");
   reapplyDiff();
   // Monaco renders its own diff from its models — it does not read xmlDiff.
   // Only the git diff page needs an explicit refresh here.
@@ -390,7 +398,7 @@ let monacoDiffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
 let diffEditorEditable = false;
 
 /** Disposable for the modified-editor content listener (re-created with each new model). */
-let monacoContentDisposable: monaco.IDisposable | null = null;
+// let monacoContentDisposable: monaco.IDisposable | null = null;
 
 /** Container div that Monaco mounts into (child of `#diff-page`). */
 const diffEditorContainer = document.querySelector<HTMLElement>(
@@ -439,8 +447,12 @@ function debounce<T extends unknown[]>(
  *    during mid-edit is silently ignored.
  */
 const syncFromMonaco = debounce(() => {
-  if (!monacoDiffEditor || !meiXML) return;
-  meiXML2 = monacoDiffEditor.getModifiedEditor().getValue();
+  if (!monacoDiffEditor || !originalXML) return;
+  // console.log(XMLToCompare, "xmlto");
+  // const test = monacoDiffEditor.getLineChanges();
+  // console.log("test", test);
+
+  xMLToCompare = monacoDiffEditor.getModifiedEditor().getValue();
 
   // Recompute LCS diff + SVG overlays (runDiff no longer touches Monaco)
   runDiff();
@@ -450,13 +462,14 @@ const syncFromMonaco = debounce(() => {
     try {
       const scale = Number(scale2Input.value);
       renderNotation(
-        meiXML2,
+        xMLToCompare,
         paginationEl2,
         toolkit2,
         notationContainer2,
         scale,
       );
       measureIdMap2 = buildMeasureIdMap(toolkit2);
+      childIdMap2 = buildChildIdMap(toolkit2);
       reapplyDiff(); // re-overlay with fresh measure map
     } catch {
       // XML is temporarily invalid while editing — skip silently
@@ -484,7 +497,7 @@ function getMonacoTheme(): string {
  * diff settings change.
  */
 function renderCodeDiffPage(): void {
-  if (!meiXML || !meiXML2) return;
+  if (!originalXML || !xMLToCompare) return;
 
   if (!monacoDiffEditor) {
     // monacoSingleEditor = monaco.editor.create(singleEditorContainer, {
@@ -511,29 +524,34 @@ function renderCodeDiffPage(): void {
 
     // Set models only on first mount
     monacoDiffEditor.setModel({
-      original: monaco.editor.createModel(meiXML, "xml"),
-      modified: monaco.editor.createModel(meiXML2, "xml"),
+      original: monaco.editor.createModel(originalXML, "xml"),
+      modified: monaco.editor.createModel(xMLToCompare, "xml"),
     });
 
     // lineNumbers must also be applied to each pane directly on first mount
     const initialPaneOpts = {
-      lineNumbers: currentSettings.showLineNumbers ? ("on" as const) : ("off" as const),
+      lineNumbers: currentSettings.showLineNumbers
+        ? ("on" as const)
+        : ("off" as const),
       minimap: { enabled: currentSettings.showMiniMap },
     };
     monacoDiffEditor.getOriginalEditor().updateOptions(initialPaneOpts);
     monacoDiffEditor.getModifiedEditor().updateOptions(initialPaneOpts);
 
-    // Wire up the live-sync listener
-    monacoContentDisposable?.dispose();
-    monacoContentDisposable = monacoDiffEditor
-      .getModifiedEditor()
-      .onDidChangeModelContent(syncFromMonaco);
+    monacoDiffEditor.getModel()?.modified.onDidChangeContent(syncFromMonaco);
+    // // Wire up the live-sync listener
+    // monacoContentDisposable?.dispose();
+    // monacoContentDisposable = monacoDiffEditor
+    //   .getModifiedEditor()
+    //   .onDidChangeModelContent(syncFromMonaco);
   } else {
     // Preserve user edits — only update appearance options.
     // lineNumbers must be set on each pane individually; the diff editor's
     // updateOptions does not propagate it to the child editors.
     const paneOpts = {
-      lineNumbers: currentSettings.showLineNumbers ? ("on" as const) : ("off" as const),
+      lineNumbers: currentSettings.showLineNumbers
+        ? ("on" as const)
+        : ("off" as const),
       minimap: { enabled: currentSettings.showMiniMap },
     };
     monacoDiffEditor.getOriginalEditor().updateOptions(paneOpts);
@@ -567,7 +585,10 @@ gitDiffSplitToggleBtn.addEventListener("click", () => {
  * @param line  The diff line to render, or `undefined` for an empty cell
  *              (shown when one side has no paired counterpart).
  */
-function splitCellHTML(line: DiffLine | undefined, side: "old" | "new"): string {
+function splitCellHTML(
+  line: DiffLine | undefined,
+  side: "old" | "new",
+): string {
   if (!line) {
     return `<div class="diff-split-cell diff-line-empty"></div>`;
   }
@@ -676,7 +697,13 @@ function splitHunkHTML(diff: ElementDiff): string {
  * `currentSettings.gitDiffOrientation`. Credits first, measures in ascending order.
  */
 function renderGitDiffPage(): void {
-  if (!xmlDiff || (xmlDiff.measures.size === 0 && xmlDiff.credits.size === 0)) {
+  const hasChanges =
+    xmlDiff &&
+    (xmlDiff.measures.size > 0 ||
+      xmlDiff.credits.size > 0 ||
+      xmlDiff.children.size > 0);
+
+  if (!xmlDiff || !hasChanges) {
     gitDiffHunksEl.innerHTML = `<p class="diff-page-empty">No differences found between the two scores.</p>`;
     return;
   }
@@ -694,7 +721,14 @@ function renderGitDiffPage(): void {
     .map(([, d]) => hunkFn(d))
     .join("");
 
-  gitDiffHunksEl.innerHTML = creditHunks + measureHunks;
+  // In detailed mode, children replace measure hunks
+  const childHunks = [...xmlDiff.children.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, d]) => hunkFn(d))
+    .join("");
+  console.log(creditHunks, measureHunks, childHunks, "dwd");
+
+  gitDiffHunksEl.innerHTML = creditHunks + measureHunks + childHunks;
 
   // Toggle the CSS class on the container so styles can target each mode
   gitDiffHunksEl.classList.toggle("is-split", isSplit);
@@ -944,20 +978,34 @@ verovio.module.onRuntimeInitialized = async () => {
   toolkit2 = new verovio.toolkit();
 
   try {
-    meiXML = etudeMei as string;
-    meiXML2 = etudeMei2 as string;
+    originalXML = etudeMei as string;
+    xMLToCompare = etudeMei2 as string;
 
     const scale = Number(sharedScaleInput.value);
     updateScaleOutput(sharedScaleOutput, scale);
     updateScaleOutput(scale1Output, scale);
     updateScaleOutput(scale2Output, scale);
 
-    renderNotation(meiXML, paginationEl, toolkit, notationContainer, scale);
-    renderNotation(meiXML2, paginationEl2, toolkit2, notationContainer2, scale);
+    renderNotation(
+      originalXML,
+      paginationEl,
+      toolkit,
+      notationContainer,
+      scale,
+    );
+    renderNotation(
+      xMLToCompare,
+      paginationEl2,
+      toolkit2,
+      notationContainer2,
+      scale,
+    );
 
     // Build id maps after loadData so getMEI returns valid data
     measureIdMap1 = buildMeasureIdMap(toolkit);
     measureIdMap2 = buildMeasureIdMap(toolkit2);
+    childIdMap1 = buildChildIdMap(toolkit);
+    childIdMap2 = buildChildIdMap(toolkit2);
 
     runDiff();
   } catch (error) {
