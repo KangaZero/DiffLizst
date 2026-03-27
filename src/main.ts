@@ -20,8 +20,30 @@ import "./components/diffSettings";
 // ─── Utilities ────────────────────────────────────────────────────────────
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
 import { getTotalPageCount } from "@/utils/getTotalPageCount";
-import { diffXML, DEFAULT_DIFF_OPTIONS, type DiffOptions, type XMLDiffResult, type ElementDiff } from "@/utils/diffXML";
-import { applyDiffHighlights, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
+import {
+  diffXML,
+  DEFAULT_DIFF_OPTIONS,
+  type DiffOptions,
+  type XMLDiffResult,
+} from "@/utils/diffXML";
+import {
+  applyDiffHighlights,
+  buildMeasureIdMap,
+} from "@/utils/applyDiffHighlights";
+
+// ─── Monaco editor ────────────────────────────────────────────────────────
+// Register Monaco's web worker before the editor is created.
+// Vite handles `?worker` imports natively — no plugin needed.
+// XML only needs the base editor worker (no separate language server).
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+
+self.MonacoEnvironment = {
+  getWorker(_id: string, _label: string): Worker {
+    return new EditorWorker();
+  },
+};
+
+import * as monaco from "monaco-editor";
 
 // ─── Verovio ──────────────────────────────────────────────────────────────
 import * as verovio from "verovio";
@@ -79,26 +101,16 @@ app.innerHTML = `
   </div>
 </header>
 
-<!-- Diff page: GitHub-style raw diff view, hidden by default -->
-<section id="diff-page" aria-label="Raw diff view"></section>
-
-<section id="center">
-  <button
-    id="theme-toggle"
-    class="theme-toggle"
-    type="button"
-    aria-label="Toggle color theme"
-    aria-pressed="false"
-  >
-    <span class="theme-toggle-track" aria-hidden="true">
-      <span class="theme-toggle-thumb"></span>
-    </span>
-    <span id="theme-toggle-label">Theme: Light</span>
-  </button>
+<!-- Diff page: Monaco side-by-side diff editor, hidden by default -->
+<section id="diff-page" aria-label="Raw diff view">
+  <div class="diff-page-file-header">
+    <span class="diff-file-old">scores/Chopin/etudeOp10No1.xml</span>
+    <span class="diff-file-new">scores/Chopin/etudeOp10No2.xml</span>
+    <button id="diff-edit-toggle" class="diff-edit-btn" type="button" aria-pressed="false" title="Toggle edit mode">Edit</button>
+  </div>
+  <div id="diff-editor-container"></div>
 </section>
-
-<div class="ticks"></div>
-
+    <div class="ticks"></div>
 <div class="notation-controls shared-controls">
   <label for="notation-scale">Scale (both)</label>
   <input id="notation-scale" type="range" min="40" max="140" step="5" value="80" />
@@ -134,36 +146,52 @@ app.innerHTML = `
 
 // ─── Element queries ───────────────────────────────────────────────────────
 
-const root               = document.documentElement;
-const notationContainer  = document.querySelector<HTMLDivElement>("#XML-notation")!;
-const notationContainer2 = document.querySelector<HTMLDivElement>("#XML-notation-compare")!;
-const notationPanel      = document.querySelector<HTMLDivElement>("#docs .notation-panel")!;
-const notationPanel2     = document.querySelector<HTMLDivElement>("#social .notation-panel")!;
+const root = document.documentElement;
+const notationContainer =
+  document.querySelector<HTMLDivElement>("#XML-notation")!;
+const notationContainer2 = document.querySelector<HTMLDivElement>(
+  "#XML-notation-compare",
+)!;
+const notationPanel = document.querySelector<HTMLDivElement>(
+  "#docs .notation-panel",
+)!;
+const notationPanel2 = document.querySelector<HTMLDivElement>(
+  "#social .notation-panel",
+)!;
 
 /** Shared scale: moves both scores simultaneously. */
-const sharedScaleInput  = document.querySelector<HTMLInputElement>("#notation-scale")!;
-const sharedScaleOutput = document.querySelector<HTMLOutputElement>("#notation-scale-value")!;
+const sharedScaleInput =
+  document.querySelector<HTMLInputElement>("#notation-scale")!;
+const sharedScaleOutput = document.querySelector<HTMLOutputElement>(
+  "#notation-scale-value",
+)!;
 
 /** Per-score scale: overrides just one score, other remains unchanged. */
-const scale1Input  = document.querySelector<HTMLInputElement>("#scale-1")!;
-const scale1Output = document.querySelector<HTMLOutputElement>("#scale-1-value")!;
-const scale2Input  = document.querySelector<HTMLInputElement>("#scale-2")!;
-const scale2Output = document.querySelector<HTMLOutputElement>("#scale-2-value")!;
+const scale1Input = document.querySelector<HTMLInputElement>("#scale-1")!;
+const scale1Output =
+  document.querySelector<HTMLOutputElement>("#scale-1-value")!;
+const scale2Input = document.querySelector<HTMLInputElement>("#scale-2")!;
+const scale2Output =
+  document.querySelector<HTMLOutputElement>("#scale-2-value")!;
 
-const themeToggleButton = document.querySelector<HTMLButtonElement>("#theme-toggle")!;
-const themeToggleLabel  = document.querySelector<HTMLSpanElement>("#theme-toggle-label")!;
-const diffSettingsEl    = document.querySelector<HTMLElement>("diff-settings")!;
-const viewToggleBtn     = document.querySelector<HTMLButtonElement>("#view-toggle")!;
-const diffPageEl        = document.querySelector<HTMLElement>("#diff-page")!;
+const diffSettingsEl = document.querySelector<HTMLElement>("diff-settings")!;
+const viewToggleBtn =
+  document.querySelector<HTMLButtonElement>("#view-toggle")!;
+const diffPageEl = document.querySelector<HTMLElement>("#diff-page")!;
 
 if (
-  !notationContainer || !notationContainer2 ||
-  !notationPanel     || !notationPanel2     ||
-  !sharedScaleInput  || !sharedScaleOutput  ||
-  !scale1Input       || !scale1Output       ||
-  !scale2Input       || !scale2Output       ||
-  !themeToggleButton || !themeToggleLabel   ||
-  !diffSettingsEl    || !viewToggleBtn      ||
+  !notationContainer ||
+  !notationContainer2 ||
+  !notationPanel ||
+  !notationPanel2 ||
+  !sharedScaleInput ||
+  !sharedScaleOutput ||
+  !scale1Input ||
+  !scale1Output ||
+  !scale2Input ||
+  !scale2Output ||
+  !diffSettingsEl ||
+  !viewToggleBtn ||
   !diffPageEl
 ) {
   throw new Error("Required app elements not found in DOM");
@@ -174,11 +202,11 @@ if (
 // `toolkit` property is set later once the WASM is ready.
 
 /** Pagination for score 1 (old / left). */
-const paginationEl: Pages  = document.createElement("page-pagination");
+const paginationEl: Pages = document.createElement("page-pagination");
 /** Pagination for score 2 (new / right). */
 const paginationEl2: Pages = document.createElement("page-pagination");
 
-paginationEl.notationContainer  = notationContainer;
+paginationEl.notationContainer = notationContainer;
 paginationEl2.notationContainer = notationContainer2;
 
 // Prepend so pagination sits above the notation stage inside each panel
@@ -189,9 +217,9 @@ notationPanel2.prepend(paginationEl2);
 
 type Theme = "light" | "dark";
 
-let meiXML:  string | null = null;
+let meiXML: string | null = null;
 let meiXML2: string | null = null;
-let toolkit:  Toolkit | null = null;
+let toolkit: Toolkit | null = null;
 let toolkit2: Toolkit | null = null;
 
 /** Cached diff result, recomputed when settings change. */
@@ -213,37 +241,23 @@ let showLineNumbers = true;
 
 // ─── Theme ─────────────────────────────────────────────────────────────────
 
-const themeStorageKey  = "theme-preference";
-const themeMediaQuery  = window.matchMedia("(prefers-color-scheme: dark)");
-const getSystemTheme   = (): Theme => (themeMediaQuery.matches ? "dark" : "light");
-
-const syncThemeToggle = (theme: Theme) => {
-  const isDark = theme === "dark";
-  themeToggleButton.setAttribute("aria-pressed", String(isDark));
-  themeToggleLabel.textContent = `Theme: ${isDark ? "Dark" : "Light"}`;
-};
+const themeStorageKey = "theme-preference";
+const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 const applyTheme = (theme: Theme, persist = false) => {
   root.dataset.theme = theme;
-  syncThemeToggle(theme);
+  // Keep Monaco in sync — setTheme is global across all editor instances
+  monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
   if (persist) window.localStorage.setItem(themeStorageKey, theme);
 };
 
 const savedTheme = window.localStorage.getItem(themeStorageKey);
 if (savedTheme === "light" || savedTheme === "dark") {
   applyTheme(savedTheme);
-} else {
-  syncThemeToggle(getSystemTheme());
 }
 
-themeToggleButton.addEventListener("click", () => {
-  const current = (root.dataset.theme as Theme | undefined) ?? getSystemTheme();
-  applyTheme(current === "dark" ? "light" : "dark", true);
-});
-
-themeMediaQuery.addEventListener("change", (e) => {
+themeMediaQuery.addEventListener("change", (_) => {
   if (window.localStorage.getItem(themeStorageKey)) return;
-  syncThemeToggle(e.matches ? "dark" : "light");
 });
 
 // ─── Scale helpers ─────────────────────────────────────────────────────────
@@ -255,7 +269,7 @@ themeMediaQuery.addEventListener("change", (e) => {
  * @param scale  Scale percentage (e.g. 80 for 80%).
  */
 function updateScaleOutput(output: HTMLOutputElement, scale: number): void {
-  output.value       = `${scale}%`;
+  output.value = `${scale}%`;
   output.textContent = `${scale}%`;
 }
 
@@ -322,94 +336,83 @@ function runDiff(opts: DiffOptions = diffOpts): void {
   if (activeView === "diff") renderDiffPage();
 }
 
-// ─── Diff page rendering ───────────────────────────────────────────────────
+// ─── Monaco diff editor ────────────────────────────────────────────────────
 
-/** Identifiers of the two score files, shown in the file header of the diff page. */
-const SCORE_NAMES = {
-  old: "scores/Chopin/etudeOp10No1.xml",
-  new: "scores/Chopin/etudeOp10No2.xml",
-} as const;
+/** Singleton Monaco diff editor, created lazily on first view toggle. */
+let monacoDiffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
+
+/** Whether the modified (right) pane is currently editable. */
+let diffEditorEditable = false;
+
+/** Container div that Monaco mounts into (child of `#diff-page`). */
+const diffEditorContainer = document.querySelector<HTMLElement>(
+  "#diff-editor-container",
+)!;
+
+/** Edit-mode toggle button in the diff page header. */
+const diffEditToggleBtn =
+  document.querySelector<HTMLButtonElement>("#diff-edit-toggle")!;
+
+diffEditToggleBtn.addEventListener("click", () => {
+  diffEditorEditable = !diffEditorEditable;
+  // Only the modified (right) pane is toggled — original stays read-only always
+  monacoDiffEditor
+    ?.getModifiedEditor()
+    .updateOptions({ readOnly: !diffEditorEditable });
+  diffEditToggleBtn.setAttribute("aria-pressed", String(diffEditorEditable));
+  diffEditToggleBtn.textContent = diffEditorEditable ? "Read-only" : "Edit";
+});
 
 /**
- * Escape `<`, `>`, `&` in a string so it is safe to inject as HTML text
- * content (e.g. inside a `<span>`).
+ * Return the Monaco theme string that matches the current app theme.
  */
-function escapeHTML(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function getMonacoTheme(): string {
+  return (root.dataset.theme ?? "light") === "dark" ? "vs-dark" : "vs";
 }
 
 /**
- * Render a GitHub-style unified diff view into `#diff-page` from the
- * current `xmlDiff` result.
+ * Create or update the Monaco side-by-side diff editor.
  *
- * The output mirrors what `formatDiffForTerminal` produces in the CLI test
- * scripts, but uses HTML + CSS classes instead of ANSI escape codes so it
- * renders correctly in the browser.
+ * First call: mounts the editor into `#diff-editor-container` with the raw
+ * XML strings as the original/modified models.
+ * Subsequent calls: updates the models and any option changes (line numbers,
+ * theme) without re-creating the editor, preserving scroll position.
  *
- * Structure per changed element:
- * ```
- * @@ [label] @@
- *  context line
- * - removed line
- * + added line
- * ```
- *
- * Credits are shown first (they appear at the top of the score), then
- * measures in ascending order.
- *
- * If no diff is available yet (e.g. scores still loading) a placeholder
- * message is shown instead.
+ * The modified (right) pane is editable — call
+ * `monacoDiffEditor.getModifiedEditor().getValue()` to read the user's edits.
  */
 function renderDiffPage(): void {
-  if (!xmlDiff || (xmlDiff.measures.size === 0 && xmlDiff.credits.size === 0)) {
-    diffPageEl.innerHTML = `<p class="diff-page-empty">No differences found between the two scores.</p>`;
-    return;
+  if (!meiXML || !meiXML2) return;
+
+  if (!monacoDiffEditor) {
+    monacoDiffEditor = monaco.editor.createDiffEditor(diffEditorContainer, {
+      renderSideBySide: true,
+      originalEditable: false, // left pane always read-only
+      readOnly: true, // right pane starts read-only; toggled via diffEditToggleBtn
+      automaticLayout: true, // resize when container size changes
+      scrollBeyondLastLine: false,
+      lineNumbers: showLineNumbers ? "on" : "off",
+      minimap: { enabled: false }, // off: gives both panes more width
+      wordWrap: "on", // prevents horizontal scrolling
+      theme: getMonacoTheme(),
+      fontSize: 13,
+    });
+  } else {
+    monacoDiffEditor.updateOptions({
+      lineNumbers: showLineNumbers ? "on" : "off",
+    });
+    monaco.editor.setTheme(getMonacoTheme());
   }
 
-  /**
-   * Build the HTML for a single hunk (one changed element).
-   *
-   * Each line gets a `diff-page-line` div containing:
-   * - Two line-number gutters (old + new), when `showLineNumbers` is `true`.
-   * - A sign gutter (`+` / `-` / ` `).
-   * - The escaped code content.
-   */
-  function hunkHTML(diff: ElementDiff): string {
-    const linesHTML = diff.lines.map(l => {
-      const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
-      const lineNosHTML = showLineNumbers
-        ? `<span class="diff-page-gutter diff-line-no">${l.oldLineNo ?? ""}</span>` +
-          `<span class="diff-page-gutter diff-line-no">${l.newLineNo ?? ""}</span>`
-        : "";
-      return `<div class="diff-page-line diff-line-${l.type}">` +
-        lineNosHTML +
-        `<span class="diff-page-gutter">${glyph}</span>` +
-        `<span class="diff-page-code">${escapeHTML(l.content)}</span>` +
-        `</div>`;
-    }).join("");
-    return `<div class="diff-hunk-header">@@ ${diff.label} @@</div>${linesHTML}`;
-  }
-
-  // Sort credits by index, measures by number — matches document order
-  const creditHunks = [...xmlDiff.credits.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, d]) => hunkHTML(d))
-    .join("");
-
-  const measureHunks = [...xmlDiff.measures.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, d]) => hunkHTML(d))
-    .join("");
-
-  diffPageEl.innerHTML =
-    `<div class="diff-page-file-header">` +
-      `<span class="diff-file-old">--- ${SCORE_NAMES.old}</span>` +
-      `<span class="diff-file-new">+++ ${SCORE_NAMES.new}</span>` +
-    `</div>` +
-    `<div class="diff-page-hunks">${creditHunks}${measureHunks}</div>`;
+  // Swap models: dispose the old pair after setting the new one so the editor
+  // never has a null model during the transition.
+  const prevModel = monacoDiffEditor.getModel();
+  monacoDiffEditor.setModel({
+    original: monaco.editor.createModel(meiXML, "xml"),
+    modified: monaco.editor.createModel(meiXML2, "xml"),
+  });
+  prevModel?.original.dispose();
+  prevModel?.modified.dispose();
 }
 
 // ─── View toggle ───────────────────────────────────────────────────────────
@@ -438,13 +441,16 @@ function toggleView(): void {
   const isDiff = activeView === "diff";
 
   viewToggleBtn.setAttribute("aria-pressed", String(isDiff));
-  notationSections.forEach(el => {
+  notationSections.forEach((el) => {
     if (el) el.style.display = isDiff ? "none" : "";
   });
 
   if (isDiff) {
     diffPageEl.classList.add("visible");
     renderDiffPage();
+    // Give the browser one frame to paint the now-visible container so Monaco
+    // can measure its dimensions and render diff decorations correctly.
+    requestAnimationFrame(() => monacoDiffEditor?.layout());
   } else {
     diffPageEl.classList.remove("visible");
   }
@@ -470,7 +476,7 @@ sharedScaleInput.addEventListener("input", () => {
   updateScaleOutput(scale2Output, scale);
 
   if (!toolkit || !toolkit2) return;
-  rescale(toolkit,  paginationEl,  notationContainer,  scale);
+  rescale(toolkit, paginationEl, notationContainer, scale);
   rescale(toolkit2, paginationEl2, notationContainer2, scale);
   reapplyDiff();
 });
@@ -509,9 +515,9 @@ scale2Input.addEventListener("input", () => {
 diffSettingsEl.addEventListener("settings-change", (e) => {
   const settings = (e as CustomEvent<DiffSettingsValue>).detail;
   diffOpts = {
-    contextLines:     settings.contextLines,
+    contextLines: settings.contextLines,
     ignoreWhitespace: settings.ignoreWhitespace,
-    algorithm:        settings.algorithm,
+    algorithm: settings.algorithm,
   };
   showLineNumbers = settings.showLineNumbers;
   runDiff(diffOpts);
@@ -559,19 +565,20 @@ function renderNotation(
   container: HTMLDivElement,
   scale: number,
 ): void {
-  if (!tk || !xmlFile) return console.warn("renderNotation: missing toolkit or XML");
+  if (!tk || !xmlFile)
+    return console.warn("renderNotation: missing toolkit or XML");
 
   const options: VerovioOptions = {
     adjustPageHeight: true,
-    breaks:           "auto",
+    breaks: "auto",
     scale,
     systemMaxPerPage: 24,
   };
 
-  tk.loadData(xmlFile);    // Step 1 – must come before setOptions / getPageCount
-  tk.setOptions(options);  // Step 2
+  tk.loadData(xmlFile); // Step 1 – must come before setOptions / getPageCount
+  tk.setOptions(options); // Step 2
 
-  pagination.total   = getTotalPageCount(tk); // Step 3 – accurate now
+  pagination.total = getTotalPageCount(tk); // Step 3 – accurate now
   pagination.toolkit = tk;
 
   container.innerHTML = tk.renderToSVG(pagination.page); // Step 4
@@ -586,11 +593,11 @@ function renderNotation(
  * then runs the initial diff.
  */
 verovio.module.onRuntimeInitialized = async () => {
-  toolkit  = new verovio.toolkit();
+  toolkit = new verovio.toolkit();
   toolkit2 = new verovio.toolkit();
 
   try {
-    meiXML  = etudeMei  as string;
+    meiXML = etudeMei as string;
     meiXML2 = etudeMei2 as string;
 
     const scale = Number(sharedScaleInput.value);
@@ -598,7 +605,7 @@ verovio.module.onRuntimeInitialized = async () => {
     updateScaleOutput(scale1Output, scale);
     updateScaleOutput(scale2Output, scale);
 
-    renderNotation(meiXML,  paginationEl,  toolkit,  notationContainer,  scale);
+    renderNotation(meiXML, paginationEl, toolkit, notationContainer, scale);
     renderNotation(meiXML2, paginationEl2, toolkit2, notationContainer2, scale);
 
     // Build id maps after loadData so getMEI returns valid data

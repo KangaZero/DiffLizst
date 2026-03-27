@@ -11,12 +11,13 @@
     "diff": "bun run ./src/tests/diffToUse.test.ts ./src/scores/Chopin/etudeOp10No1.xml ./src/scores/Chopin/etudeOp10No2.xml"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "vite": "^8.0.0",
     "@types/bun": "^1.3.10",
-    "@types/verovio": "^5.1.0"
+    "@types/verovio": "^5.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.0"
   },
   "dependencies": {
+    "monaco-editor": "^0.55.1",
     "verovio": "^6.1.0"
   }
 }
