@@ -786,8 +786,138 @@ code {
 /* Monaco editor container — fills the remaining space after the header */
 #diff-editor-container {
   flex: 1 1 0;
+  min-height: 0; /* critical: lets flex child shrink so Monaco can own the height */
+}
+
+/* ─── Git diff page (hunked HTML view) ──────────────────────────── */
+
+#git-diff-page {
+  display: none;
+  flex-direction: column;
+  height: calc(100dvh - var(--toolbar-height));
+  overflow: hidden;
+}
+
+#git-diff-page.visible {
+  display: flex;
+}
+
+.diff-page-hunks {
+  flex: 1 1 0;
   min-height: 0;
-  /* critical: lets flex child shrink so Monaco can own the height */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: var(--font-size-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.diff-page-hunks::-webkit-scrollbar        { height: 3px; width: 3px; }
+.diff-page-hunks::-webkit-scrollbar-track  { background: transparent; }
+.diff-page-hunks::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+
+.diff-hunk-header {
+  padding: var(--space-1) var(--space-4);
+  background: color-mix(in srgb, var(--color-info) 8%, var(--code-bg));
+  color: var(--color-info);
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+
+.diff-hunk-header:first-child {
+  border-top: none;
+}
+
+.diff-page-line {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+  line-height: 1.6;
+}
+
+.diff-page-line.diff-line-add    { background: var(--notation-diff-add-bg); }
+.diff-page-line.diff-line-remove { background: var(--notation-diff-remove-bg); }
+.diff-page-line.diff-line-context { background: transparent; }
+
+.diff-page-gutter {
+  width: 20px;
+  min-width: 20px;
+  text-align: center;
+  padding: 0 var(--space-2);
+  user-select: none;
+  color: var(--text);
+  opacity: 0.5;
+}
+
+.diff-page-gutter.diff-line-no {
+  min-width: 3ch;
+  width: auto;
+  text-align: right;
+  padding-right: 6px;
+  opacity: 0.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-line-add    .diff-page-gutter { color: var(--notation-diff-add);    opacity: 1; }
+.diff-line-remove .diff-page-gutter { color: var(--notation-diff-remove); opacity: 1; }
+
+.diff-page-code {
+  flex: 1 1 auto;
+  padding: 0 var(--space-4) 0 var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.diff-page-code::-webkit-scrollbar        { height: 3px; }
+.diff-page-code::-webkit-scrollbar-track  { background: transparent; }
+.diff-page-code::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+
+.diff-page-empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+/* ─── Split (side-by-side) diff view ────────────────────────────── */
+
+/* Each row is a flex container spanning the full width */
+.diff-split-row {
+  display: flex;
+  width: 100%;
+}
+
+/* Each side takes exactly half the row */
+.diff-split-cell {
+  flex: 1 1 0;
+  min-width: 0;          /* lets the cell shrink so content scrolls, not expands */
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+  line-height: 1.6;
+  border-right: 1px solid var(--border);
+}
+
+.diff-split-cell:last-child {
+  border-right: none;
+}
+
+.diff-split-cell.diff-line-add     { background: var(--notation-diff-add-bg); }
+.diff-split-cell.diff-line-remove  { background: var(--notation-diff-remove-bg); }
+.diff-split-cell.diff-line-context { background: transparent; }
+
+/* Empty cell — shown when a remove or add has no paired counterpart */
+.diff-split-cell.diff-line-empty {
+  background: color-mix(in srgb, var(--border) 25%, transparent);
+}
+
+/* In split mode the hunk header spans both columns */
+.is-split .diff-hunk-header {
+  width: 100%;
 }
 
 #next-steps ul {
