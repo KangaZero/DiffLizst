@@ -359,6 +359,7 @@ function reapplyDiff(): void {
     xmlDiff,
     measureIdMap1,
     measureIdMap2,
+    currentSettings.showLineNumbers,
   );
 }
 
@@ -514,17 +515,29 @@ function renderCodeDiffPage(): void {
       modified: monaco.editor.createModel(meiXML2, "xml"),
     });
 
+    // lineNumbers must also be applied to each pane directly on first mount
+    const initialPaneOpts = {
+      lineNumbers: currentSettings.showLineNumbers ? ("on" as const) : ("off" as const),
+      minimap: { enabled: currentSettings.showMiniMap },
+    };
+    monacoDiffEditor.getOriginalEditor().updateOptions(initialPaneOpts);
+    monacoDiffEditor.getModifiedEditor().updateOptions(initialPaneOpts);
+
     // Wire up the live-sync listener
     monacoContentDisposable?.dispose();
     monacoContentDisposable = monacoDiffEditor
       .getModifiedEditor()
       .onDidChangeModelContent(syncFromMonaco);
   } else {
-    // Preserve user edits — only update appearance options
-    monacoDiffEditor.updateOptions({
-      lineNumbers: currentSettings.showLineNumbers ? "on" : "off",
+    // Preserve user edits — only update appearance options.
+    // lineNumbers must be set on each pane individually; the diff editor's
+    // updateOptions does not propagate it to the child editors.
+    const paneOpts = {
+      lineNumbers: currentSettings.showLineNumbers ? ("on" as const) : ("off" as const),
       minimap: { enabled: currentSettings.showMiniMap },
-    });
+    };
+    monacoDiffEditor.getOriginalEditor().updateOptions(paneOpts);
+    monacoDiffEditor.getModifiedEditor().updateOptions(paneOpts);
     monaco.editor.setTheme(getMonacoTheme());
   }
 }
@@ -554,13 +567,17 @@ gitDiffSplitToggleBtn.addEventListener("click", () => {
  * @param line  The diff line to render, or `undefined` for an empty cell
  *              (shown when one side has no paired counterpart).
  */
-function splitCellHTML(line: DiffLine | undefined): string {
+function splitCellHTML(line: DiffLine | undefined, side: "old" | "new"): string {
   if (!line) {
     return `<div class="diff-split-cell diff-line-empty"></div>`;
   }
   const glyph = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
+  const lineNo = currentSettings.showLineNumbers
+    ? `<span class="diff-page-gutter diff-line-no">${side === "old" ? (line.oldLineNo ?? "") : (line.newLineNo ?? "")}</span>`
+    : "";
   return (
     `<div class="diff-split-cell diff-line-${line.type}">` +
+    lineNo +
     `<span class="diff-page-gutter">${glyph}</span>` +
     `<span class="diff-page-code">${escapeHTML(line.content)}</span>` +
     `</div>`
@@ -574,8 +591,13 @@ function unifiedHunkHTML(diff: ElementDiff): string {
   const linesHTML = diff.lines
     .map((l) => {
       const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
+      const lineNosHTML = currentSettings.showLineNumbers
+        ? `<span class="diff-page-gutter diff-line-no">${l.oldLineNo ?? ""}</span>` +
+          `<span class="diff-page-gutter diff-line-no">${l.newLineNo ?? ""}</span>`
+        : "";
       return (
         `<div class="diff-page-line diff-line-${l.type}">` +
+        lineNosHTML +
         `<span class="diff-page-gutter">${glyph}</span>` +
         `<span class="diff-page-code">${escapeHTML(l.content)}</span>` +
         `</div>`
@@ -624,17 +646,23 @@ function splitHunkHTML(diff: ElementDiff): string {
       if (row.kind === "context") {
         // Context lines: same content duplicated in both cells
         const code = escapeHTML(row.line.content);
+        const lineNoOld = currentSettings.showLineNumbers
+          ? `<span class="diff-page-gutter diff-line-no">${row.line.oldLineNo ?? ""}</span>`
+          : "";
+        const lineNoNew = currentSettings.showLineNumbers
+          ? `<span class="diff-page-gutter diff-line-no">${row.line.newLineNo ?? ""}</span>`
+          : "";
         return (
           `<div class="diff-split-row">` +
-          `<div class="diff-split-cell diff-line-context"><span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
-          `<div class="diff-split-cell diff-line-context"><span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
+          `<div class="diff-split-cell diff-line-context">${lineNoOld}<span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
+          `<div class="diff-split-cell diff-line-context">${lineNoNew}<span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
           `</div>`
         );
       }
       return (
         `<div class="diff-split-row">` +
-        splitCellHTML(row.remove) +
-        splitCellHTML(row.add) +
+        splitCellHTML(row.remove, "old") +
+        splitCellHTML(row.add, "new") +
         `</div>`
       );
     })
@@ -725,6 +753,58 @@ function switchView(target: View): void {
 
 viewToggleBtn.addEventListener("click", () => switchView("monaco"));
 gitDiffToggleBtn.addEventListener("click", () => switchView("gitdiff"));
+
+// ─── Diff overlay → Monaco navigation ────────────────────────────────────
+
+/**
+ * Convert an ElementDiff label into a search string for Monaco's model.
+ *
+ * Measures are identified by their `number` attribute; credits fall back
+ * to a generic `<credit>` tag search (Nth occurrence isn't worth the
+ * complexity since credits rarely number more than a handful).
+ */
+function labelToSearchTerm(label: string): string {
+  const m = label.match(/^measure (\d+)$/);
+  return m ? `number="${m[1]}"` : "<credit>";
+}
+
+/**
+ * Switch to the Monaco view and reveal the first changed line for `diff`.
+ *
+ * - `remove`-only diffs are shown on the original (left) editor.
+ * - `add` / `change` diffs are shown on the modified (right) editor.
+ */
+function navigateMonacoToDiff(diff: ElementDiff): void {
+  if (!monacoDiffEditor) return;
+  const isRemove = diff.changeType === "remove";
+  const editor = isRemove
+    ? monacoDiffEditor.getOriginalEditor()
+    : monacoDiffEditor.getModifiedEditor();
+  const model = editor.getModel();
+  if (!model) return;
+  const matches = model.findMatches(
+    labelToSearchTerm(diff.label),
+    /* searchOnlyEditableRange */ true,
+    /* isRegex */ false,
+    /* matchCase */ false,
+    /* wordSeparators */ null,
+    /* captureMatches */ false,
+  );
+  if (matches.length === 0) return;
+  const line = matches[0].range.startLineNumber;
+  editor.revealLineInCenter(line);
+  editor.setPosition({ lineNumber: line, column: 1 });
+  editor.focus();
+}
+
+[notationContainer, notationContainer2].forEach((container) => {
+  container.addEventListener("diff-navigate", (e) => {
+    const diff = (e as CustomEvent<ElementDiff>).detail;
+    switchView("monaco");
+    // Wait one frame so Monaco has been laid out before we reveal the line
+    requestAnimationFrame(() => navigateMonacoToDiff(diff));
+  });
+});
 
 // ─── Scale event listeners ─────────────────────────────────────────────────
 

@@ -18,6 +18,10 @@ export type DiffLine = {
   type: DiffLineType;
   /** Raw text content of the line (no leading `+`/`-`/` ` prefix). */
   content: string;
+  /** 1-based line number in the old file. Present on `remove` and `context` lines. */
+  oldLineNo?: number;
+  /** 1-based line number in the new file. Present on `add` and `context` lines. */
+  newLineNo?: number;
 };
 
 /**
@@ -209,15 +213,16 @@ function elementDiff(
 
   // Diff on normalised lines, then map result back to original content
   const normalised = diffLines(normLines1, normLines2);
-  let r1 = 0; // raw index pointer for old lines
-  let r2 = 0; // raw index pointer for new lines
+  let r1 = 0; // raw index pointer for old lines (0-based)
+  let r2 = 0; // raw index pointer for new lines (0-based)
   const withRaw: DiffLine[] = normalised.map((dl) => {
     if (dl.type === "remove")
-      return { type: "remove", content: rawLines1[r1++] };
-    if (dl.type === "add") return { type: "add", content: rawLines2[r2++] };
-    r1++;
-    r2++;
-    return { type: "context", content: dl.content };
+      return { type: "remove", content: rawLines1[r1], oldLineNo: ++r1 };
+    if (dl.type === "add")
+      return { type: "add", content: rawLines2[r2], newLineNo: ++r2 };
+    const oldLineNo = ++r1;
+    const newLineNo = ++r2;
+    return { type: "context", content: dl.content, oldLineNo, newLineNo };
   });
 
   return {
@@ -241,8 +246,14 @@ function singleSideDiff(
   const lines = new XMLSerializer()
     .serializeToString(el)
     .split("\n")
-    .filter((l) => l.trim())
-    .map((l) => ({ type: changeType, content: l }));
+    .map((content, i) => ({
+      type: changeType,
+      content,
+      ...(changeType === "remove"
+        ? { oldLineNo: i + 1 }
+        : { newLineNo: i + 1 }),
+    }))
+    .filter((l) => l.content.trim());
   return { changeType, label, lines };
 }
 

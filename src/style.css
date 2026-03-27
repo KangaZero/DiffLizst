@@ -530,7 +530,7 @@ code {
 .diff-overlay {
   position: absolute;
   pointer-events: all;
-  cursor: default;
+  cursor: pointer;
   border-radius: var(--radius-sm);
   z-index: var(--z-raised);
 }

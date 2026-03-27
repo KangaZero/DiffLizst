@@ -65,7 +65,7 @@ function getTooltip(): HTMLDivElement {
  * @param diff            The element diff to render.
  * @param showLineNumbers Whether to prepend old/new line number columns.
  */
-function buildTooltipHTML(diff: ElementDiff): string {
+function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
   const header = `<span class="diff-tooltip-header">@@ ${diff.label} @@</span>`;
   const body = diff.lines
     .map((l) => {
@@ -75,6 +75,18 @@ function buildTooltipHTML(diff: ElementDiff): string {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+      if (showLineNumbers) {
+        const oldNo = l.oldLineNo != null ? String(l.oldLineNo) : "";
+        const newNo = l.newLineNo != null ? String(l.newLineNo) : "";
+        return (
+          `<span class="${cls}">` +
+          `<span class="diff-line-no">${oldNo}</span>` +
+          `<span class="diff-line-no">${newNo}</span>` +
+          `<span class="diff-line-sign">${prefix}</span>` +
+          escaped +
+          `</span>`
+        );
+      }
       return `<span class="${cls}">${prefix}${escaped}</span>`;
     })
     .join("");
@@ -121,9 +133,10 @@ function createOverlay(
   targetEl: Element,
   container: HTMLElement,
   diff: ElementDiff,
+  showLineNumbers: boolean,
 ): HTMLDivElement {
   const tooltip = getTooltip();
-  const html = buildTooltipHTML(diff);
+  const html = buildTooltipHTML(diff, showLineNumbers);
 
   const overlay = document.createElement("div");
   overlay.className = `diff-overlay diff-overlay--${diff.changeType}`;
@@ -136,6 +149,16 @@ function createOverlay(
   overlay.style.top = `${targetRect.top - containerRect.top + container.scrollTop}px`;
   overlay.style.width = `${targetRect.width}px`;
   overlay.style.height = `${targetRect.height}px`;
+
+  // Click navigates to the corresponding line in the Monaco diff editor
+  overlay.addEventListener("click", () => {
+    overlay.dispatchEvent(
+      new CustomEvent<ElementDiff>("diff-navigate", {
+        detail: diff,
+        bubbles: true,
+      }),
+    );
+  });
 
   // Show / follow / hide tooltip on mouse events
   overlay.addEventListener("mouseenter", (e) => {
@@ -227,6 +250,7 @@ export function applyDiffHighlights(
   diff: XMLDiffResult,
   measureIdToNum1: Map<string, number>,
   measureIdToNum2: Map<string, number>,
+  showLineNumbers = true,
 ): void {
   // Remove stale overlays from the previous render
   [container1, container2].forEach((c) =>
@@ -244,7 +268,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "add") return; // 'add' only shown on right side
-    container1.appendChild(createOverlay(el, container1, d));
+    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
   });
 
   container2.querySelectorAll<SVGGElement>("g.measure").forEach((el) => {
@@ -253,7 +277,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "remove") return; // 'remove' only shown on left side
-    container2.appendChild(createOverlay(el, container2, d));
+    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
   });
 
   // ── Credits (page header text) ─────────────────────────────────────────
@@ -273,10 +297,10 @@ export function applyDiffHighlights(
     const t1 = texts1[idx];
     const t2 = texts2[idx];
     if (t1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(createOverlay(t1, container1, d));
+      container1.appendChild(createOverlay(t1, container1, d, showLineNumbers));
     }
     if (t2 && (d.changeType === "change" || d.changeType === "add")) {
-      container2.appendChild(createOverlay(t2, container2, d));
+      container2.appendChild(createOverlay(t2, container2, d, showLineNumbers));
     }
   }
 }
