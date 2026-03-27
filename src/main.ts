@@ -527,15 +527,6 @@ function renderCodeDiffPage(): void {
     });
     monaco.editor.setTheme(getMonacoTheme());
   }
-  //HACK: For some reason monaco editor x-axis is very offset to the text, need to reset the width
-  setTimeout(() => {
-    const monacoViewLines = document.querySelectorAll(".view-lines");
-    if (!monacoViewLines)
-      console.warn("no view lines found, cannot reset width");
-    for (let i = 0; i < monacoViewLines.length; i++) {
-      (monacoViewLines[i] as HTMLDivElement).style.width = "0px";
-    }
-  }, 0);
 }
 
 // ─── Git diff page (hunked HTML view) ──────────────────────────────────────

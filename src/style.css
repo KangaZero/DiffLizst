@@ -787,6 +787,13 @@ code {
   /* critical: lets flex child shrink so Monaco can own the height */
 }
 
+/* HACK: Monaco sets an inline width on .view-lines based on the longest line,
+   which causes cursor/text misalignment when word-wrap is on. Forcing
+   width: 0 makes the element take its width from the flex layout instead. */
+#diff-editor-container .view-lines {
+  width: 0 !important;
+}
+
 #single-editor-container {
   flex: 1
 }
