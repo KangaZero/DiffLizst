@@ -348,6 +348,7 @@ export function applyDiffHighlights(
     }
   }
 
+  //TODO: add in the part=list as well as other tags needed
   // ── Part Lists (Instrument Name) ─────────────────────────────────────────
   // Verovio renders <credit> content as <text> elements inside g.pgHead.
   // Only present on page 1 — on other pages querySelector returns null and

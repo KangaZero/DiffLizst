@@ -16,6 +16,8 @@ import "./components/notation/note";
 import "./components/themeToggle";
 import "./components/pages";
 import "./components/diffSettings";
+import "./components/scoreLoader";
+import type { ScoreLoader, ScoreLoaderSample, ScoreLoadDetail } from "./components/scoreLoader";
 
 // ─── Utilities ────────────────────────────────────────────────────────────
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
@@ -54,10 +56,19 @@ import { type VerovioOptions, toolkit as Toolkit } from "verovio";
 
 // ─── Score sources (Vite raw imports) ─────────────────────────────────────
 // @ts-ignore: raw import as string
-import etudeMei from "@/scores/Chopin/etudeOp10No1.xml?raw";
-// @ts-ignore: raw import as string
-import etudeMei2 from "@/scores/Chopin/etudeOp10No1.xml?raw";
-// import etudeMei2 from "@/scores/Chopin/etudeOp10No2.xml?raw";
+import chopinOp10No1 from "@/scores/Chopin/etudeOp10No1.xml?raw";
+
+/**
+ * Pre-bundled sample scores available in the Load Score dropdown.
+ * Add entries here as new reference scores are added to src/scores/.
+ */
+const SAMPLE_SCORES: ScoreLoaderSample[] = [
+  {
+    id: "chopin-op10-no1",
+    label: "Chopin – Étude Op. 10 No. 1",
+    xml: chopinOp10No1 as string,
+  },
+];
 
 import type { Pages } from "./components/pages";
 import {
@@ -164,6 +175,7 @@ app.innerHTML = `
         <label for="scale-1">Scale</label>
         <input id="scale-1" type="range" min="40" max="140" step="5" value="80" />
         <output id="scale-1-value" for="scale-1">80%</output>
+        <score-loader id="score-loader-1"></score-loader>
       </div>
       <div id="XML-notation" class="notation-stage">Loading score…</div>
     </div>
@@ -174,6 +186,7 @@ app.innerHTML = `
         <label for="scale-2">Scale</label>
         <input id="scale-2" type="range" min="40" max="140" step="5" value="80" />
         <output id="scale-2-value" for="scale-2">80%</output>
+        <score-loader id="score-loader-2"></score-loader>
       </div>
       <div id="XML-notation-compare" class="notation-stage">Loading score…</div>
     </div>
@@ -263,6 +276,25 @@ paginationEl2.notationContainer = notationContainer2;
 // Prepend so pagination sits above the notation stage inside each panel
 notationPanel.prepend(paginationEl);
 notationPanel2.prepend(paginationEl2);
+
+// ─── Score loader components ────────────────────────────────────────────────
+
+const scoreLoaderEl = document.querySelector<ScoreLoader>("#score-loader-1")!;
+const scoreLoaderEl2 = document.querySelector<ScoreLoader>("#score-loader-2")!;
+
+// Both panels share the same sample list — single source of truth.
+scoreLoaderEl.samples = SAMPLE_SCORES;
+scoreLoaderEl2.samples = SAMPLE_SCORES;
+
+scoreLoaderEl.addEventListener("score-load", (e) => {
+  const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
+  reloadScore(1, xml, filename);
+});
+
+scoreLoaderEl2.addEventListener("score-load", (e) => {
+  const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
+  reloadScore(2, xml, filename);
+});
 
 // ─── Mutable rendering state ───────────────────────────────────────────────
 
@@ -368,6 +400,44 @@ function reapplyDiff(): void {
     childIdMap2,
     currentSettings.showLineNumbers,
   );
+}
+
+/**
+ * Swap out one score and refresh everything downstream.
+ *
+ * Updates the XML state variable, re-renders the Verovio notation, rebuilds
+ * the measure/child ID maps for accurate highlighting, then re-runs the full
+ * diff. If Monaco already has models open they are updated in-place so the
+ * user doesn't lose editor position on the other pane.
+ *
+ * @param which    Which score slot to replace (1 = original/left, 2 = compare/right).
+ * @param xml      Raw MusicXML string for the new score.
+ * @param filename Display name shown in the Monaco file header.
+ */
+function reloadScore(which: 1 | 2, xml: string, filename: string): void {
+  const scale = Number(sharedScaleInput.value);
+
+  if (which === 1) {
+    originalXML = xml;
+    renderNotation(xml, paginationEl, toolkit, notationContainer, scale);
+    measureIdMap1 = buildMeasureIdMap(toolkit!);
+    childIdMap1 = buildChildIdMap(toolkit!);
+    monacoDiffEditor?.getModel()?.original.setValue(xml);
+    document.querySelectorAll<HTMLElement>(".diff-file-old").forEach((el) => {
+      el.textContent = filename;
+    });
+  } else {
+    xMLToCompare = xml;
+    renderNotation(xml, paginationEl2, toolkit2, notationContainer2, scale);
+    measureIdMap2 = buildMeasureIdMap(toolkit2!);
+    childIdMap2 = buildChildIdMap(toolkit2!);
+    monacoDiffEditor?.getModel()?.modified.setValue(xml);
+    document.querySelectorAll<HTMLElement>(".diff-file-new").forEach((el) => {
+      el.textContent = filename;
+    });
+  }
+
+  runDiff();
 }
 
 /**
@@ -978,8 +1048,8 @@ verovio.module.onRuntimeInitialized = async () => {
   toolkit2 = new verovio.toolkit();
 
   try {
-    originalXML = etudeMei as string;
-    xMLToCompare = etudeMei2 as string;
+    originalXML = chopinOp10No1 as string;
+    xMLToCompare = chopinOp10No1 as string;
 
     const scale = Number(sharedScaleInput.value);
     updateScaleOutput(sharedScaleOutput, scale);
