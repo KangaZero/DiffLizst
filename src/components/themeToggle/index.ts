@@ -1,4 +1,4 @@
-import styles from "./ThemeToggle.css?inline";
+import styles from "./themeToggle.css?inline";
 import * as monaco from "monaco-editor";
 
 type Theme = "light" | "dark";
