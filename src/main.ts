@@ -17,7 +17,13 @@ import "./components/themeToggle";
 import "./components/pages";
 import "./components/diffSettings";
 import "./components/scoreLoader";
-import type { ScoreLoader, ScoreLoaderSample, ScoreLoadDetail } from "./components/scoreLoader";
+import type {
+  ScoreLoader,
+  ScoreLoaderSample,
+  ScoreLoadDetail,
+  Composer,
+  MXML,
+} from "./components/scoreLoader";
 
 // ─── Utilities ────────────────────────────────────────────────────────────
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
@@ -54,21 +60,30 @@ import * as monaco from "monaco-editor";
 import * as verovio from "verovio";
 import { type VerovioOptions, toolkit as Toolkit } from "verovio";
 
-// ─── Score sources (Vite raw imports) ─────────────────────────────────────
-// @ts-ignore: raw import as string
-import chopinOp10No1 from "@/scores/Chopin/etudeOp10No1.xml?raw";
+// ─── Score sources ─────────────────────────────────────────────────────────
+// Vite's import.meta.glob statically discovers every XML under src/scores/ at
+// build time. Adding a new score is just dropping a file in the right folder:
+//   src/scores/<Composer>/<label>.xml
+// No manual import or array entry needed.
+const _scoreModules = import.meta.glob<string>("./scores/**/*.xml", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 
-/**
- * Pre-bundled sample scores available in the Load Score dropdown.
- * Add entries here as new reference scores are added to src/scores/.
- */
-const SAMPLE_SCORES: ScoreLoaderSample[] = [
-  {
-    id: "chopin-op10-no1",
-    label: "Chopin – Étude Op. 10 No. 1",
-    xml: chopinOp10No1 as string,
+const SAMPLE_SCORES: ScoreLoaderSample[] = Object.entries(_scoreModules).map(
+  ([path, xml]) => {
+    const segments = path.split("/");
+    const composer = segments[segments.length - 2] as Composer;
+    const label = segments[segments.length - 1].replace(/\.xml$/i, "");
+    return {
+      id: `${composer}-${label}` as `${Composer}-${string}`,
+      composer,
+      label,
+      xml: xml as MXML,
+    };
   },
-];
+);
 
 import type { Pages } from "./components/pages";
 import {
@@ -1048,8 +1063,8 @@ verovio.module.onRuntimeInitialized = async () => {
   toolkit2 = new verovio.toolkit();
 
   try {
-    originalXML = chopinOp10No1 as string;
-    xMLToCompare = chopinOp10No1 as string;
+    originalXML = SAMPLE_SCORES[0]?.xml ?? null;
+    xMLToCompare = SAMPLE_SCORES[0]?.xml ?? null;
 
     const scale = Number(sharedScaleInput.value);
     updateScaleOutput(sharedScaleOutput, scale);

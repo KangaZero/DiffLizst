@@ -2,7 +2,8 @@
  * `<score-loader>` Web Component
  *
  * A "Load Score" button that opens a dropdown panel with two options:
- *  1. Pre-bundled sample scores (passed in via the `samples` property).
+ *  1. Pre-bundled sample scores grouped by composer, each group in a closed
+ *     accordion by default (native `<details>`/`<summary>`).
  *  2. User-uploaded MusicXML file (`.xml` / `.musicxml`).
  *
  * When the user picks a sample or uploads a file the component dispatches a
@@ -19,7 +20,7 @@
  * ```
  * ```ts
  * const loader = document.querySelector<ScoreLoader>('#score-loader-1')!;
- * loader.samples = [{ id: 'op10-1', label: 'Chopin – Étude Op.10 No.1', xml: rawXml }];
+ * loader.samples = [{ id: 'op10-1', composer: 'Chopin', label: 'Étude Op.10 No.1', xml: rawXml }];
  * loader.addEventListener('score-load', (e) => {
  *   const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
  *   reloadScore(xml, filename);
@@ -27,11 +28,33 @@
  * ```
  */
 
+export type Composer =
+  | "Chopin"
+  | "Beethoven"
+  | "Mozart"
+  | "Bach"
+  | "Debussy"
+  | "Rachmaninoff"
+  | "Schubert"
+  | "Liszt"
+  | "Tchaikovsky"
+  | "Prokofiev"
+  | "Stravinsky"
+  | "Satie"
+  | "Grieg"
+  | "Mendelssohn"
+  | "Ravel"
+  | "Haydn";
+
+/** Branded type to indicate this string should be raw MusicXML content. */
+export type MXML = string & { __brand: "musicxml" };
+
 /** One entry in the pre-bundled score list shown inside the dropdown. */
 export type ScoreLoaderSample = {
-  id: string;
+  id: `${Composer}-${string}`;
+  composer: Composer;
   label: string;
-  xml: string;
+  xml: MXML;
 };
 
 /** Payload dispatched with the `score-load` CustomEvent. */
@@ -57,6 +80,12 @@ const UPLOAD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="
   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
   <polyline points="17 8 12 3 7 8"/>
   <line x1="12" y1="3" x2="12" y2="15"/>
+</svg>`;
+
+const CHEVRON_ICON = `<svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+  fill="none" stroke="currentColor" stroke-width="2.5"
+  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="m9 18 6-6-6-6"/>
 </svg>`;
 
 // ─── Template ──────────────────────────────────────────────────────────────
@@ -104,12 +133,13 @@ template.innerHTML = `
     top: calc(100% + 6px);
     left: 0;
     z-index: 300;
-    min-width: 230px;
+    min-width: 240px;
     background: var(--code-bg, #f4f3ec);
     border: 1px solid var(--border, #e5e4e7);
     border-radius: var(--radius-md, 8px);
     box-shadow: var(--shadow, rgba(0,0,0,0.1) 0 10px 15px -3px);
     padding: 8px 0;
+    overflow: hidden;
   }
   .panel.open {
     display: block;
@@ -124,18 +154,58 @@ template.innerHTML = `
     padding: 4px 14px 6px;
   }
 
-  .divider {
-    border: none;
+  /* ── Composer accordion ── */
+
+  details {
     border-top: 1px solid var(--border, #e5e4e7);
-    margin: 6px 0;
   }
+  details:first-of-type {
+    border-top: none;
+  }
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--text, #6b6375);
+    list-style: none;
+    user-select: none;
+    transition: background var(--duration-fast, 0.15s), color var(--duration-fast, 0.15s);
+  }
+  /* Hide native disclosure triangle in all browsers */
+  summary::-webkit-details-marker { display: none; }
+  summary::marker { display: none; }
+
+  summary:hover {
+    background: var(--accent-bg, rgba(170,59,255,0.07));
+    color: var(--text-h, #08060d);
+  }
+  summary:focus-visible {
+    outline: 2px solid var(--accent, #aa3bff);
+    outline-offset: -2px;
+  }
+
+  .chevron {
+    flex-shrink: 0;
+    transition: transform var(--duration-fast, 0.15s);
+  }
+  details[open] > summary .chevron {
+    transform: rotate(90deg);
+  }
+
+  /* ── Score buttons ── */
 
   .sample-btn {
     display: flex;
     align-items: center;
     width: 100%;
     text-align: left;
-    padding: 7px 14px;
+    padding: 6px 14px 6px 24px;
     border: none;
     background: transparent;
     color: var(--text-h, #08060d);
@@ -150,6 +220,14 @@ template.innerHTML = `
   .sample-btn:focus-visible {
     outline: 2px solid var(--accent, #aa3bff);
     outline-offset: -2px;
+  }
+
+  /* ── Divider & upload ── */
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border, #e5e4e7);
+    margin: 6px 0;
   }
 
   .upload-row {
@@ -178,17 +256,18 @@ template.innerHTML = `
 </button>
 
 <div class="panel" role="dialog" aria-label="Score selection">
-  <div class="section-label">Sample Scores</div>
-  <div class="samples-list"></div>
-
-  <hr class="divider" />
-
-  <div class="section-label">Upload</div>
+<div class="section-label">Upload</div>
   <label class="upload-row">
     ${UPLOAD_ICON}
     Choose XML file…
     <input type="file" accept=".xml,.musicxml" />
   </label>
+
+  <hr class="divider" />
+
+  <div class="section-label">Sample Scores</div>
+  <div class="samples-list"></div>
+  
 </div>
 `;
 
@@ -209,10 +288,13 @@ export class ScoreLoader extends HTMLElement {
     this.#shadow = this.attachShadow({ mode: "open" });
     this.#shadow.appendChild(template.content.cloneNode(true));
 
-    this.#triggerBtn = this.#shadow.querySelector<HTMLButtonElement>(".trigger")!;
+    this.#triggerBtn =
+      this.#shadow.querySelector<HTMLButtonElement>(".trigger")!;
     this.#panel = this.#shadow.querySelector<HTMLDivElement>(".panel")!;
-    this.#samplesList = this.#shadow.querySelector<HTMLDivElement>(".samples-list")!;
-    this.#fileInput = this.#shadow.querySelector<HTMLInputElement>('input[type="file"]')!;
+    this.#samplesList =
+      this.#shadow.querySelector<HTMLDivElement>(".samples-list")!;
+    this.#fileInput =
+      this.#shadow.querySelector<HTMLInputElement>('input[type="file"]')!;
 
     this.#triggerBtn.addEventListener("click", () => this.#toggle());
 
@@ -240,7 +322,7 @@ export class ScoreLoader extends HTMLElement {
     });
   }
 
-  /** Pre-loaded sample scores shown in the dropdown list. */
+  /** Pre-loaded sample scores shown in the dropdown, grouped by composer. */
   get samples(): ScoreLoaderSample[] {
     return this.#samples;
   }
@@ -254,16 +336,35 @@ export class ScoreLoader extends HTMLElement {
 
   #renderSamples(): void {
     this.#samplesList.innerHTML = "";
+
+    // Group samples by composer, preserving insertion order.
+    const byComposer = new Map<Composer, ScoreLoaderSample[]>();
     for (const sample of this.#samples) {
-      const btn = document.createElement("button");
-      btn.className = "sample-btn";
-      btn.type = "button";
-      btn.textContent = sample.label;
-      btn.addEventListener("click", () => {
-        this.#dispatch(sample.xml, sample.label);
-        this.#close();
-      });
-      this.#samplesList.appendChild(btn);
+      const group = byComposer.get(sample.composer) ?? [];
+      group.push(sample);
+      byComposer.set(sample.composer, group);
+    }
+
+    for (const [composer, scores] of byComposer) {
+      const details = document.createElement("details");
+
+      const summary = document.createElement("summary");
+      summary.innerHTML = `<span>${composer}</span>${CHEVRON_ICON}`;
+      details.appendChild(summary);
+
+      for (const score of scores) {
+        const btn = document.createElement("button");
+        btn.className = "sample-btn";
+        btn.type = "button";
+        btn.textContent = score.label;
+        btn.addEventListener("click", () => {
+          this.#dispatch(score.xml, score.label);
+          this.#close();
+        });
+        details.appendChild(btn);
+      }
+
+      this.#samplesList.appendChild(details);
     }
   }
 

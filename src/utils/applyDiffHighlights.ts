@@ -353,7 +353,14 @@ export function applyDiffHighlights(
   // Verovio renders <credit> content as <text> elements inside g.pgHead.
   // Only present on page 1 — on other pages querySelector returns null and
   // texts arrays are empty, making the loop below a safe no-op.
-
+  // const partList1 = container1.querySelector("g.label");
+  // const partList2 = container2.querySelector("g.label");
+  // const partListTxt1 = partList1
+  //
+  // for (let i = 0; i < .length; i++) {
+  //   const element = array[i];
+  //
+  // }
   // ── Detailed child diffs (note / rest level) ───────────────────────────
   // Mirrors the measure overlay approach: iterate SVG elements on the current
   // page, resolve their diff key from the reverse map, then look up the diff.
