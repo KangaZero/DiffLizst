@@ -353,8 +353,29 @@ export function applyDiffHighlights(
   // Verovio renders <credit> content as <text> elements inside g.pgHead.
   // Only present on page 1 — on other pages querySelector returns null and
   // texts arrays are empty, making the loop below a safe no-op.
-  // const partList1 = container1.querySelector("g.label");
-  // const partList2 = container2.querySelector("g.label");
+  const partList1 = container1.querySelector("g.label");
+  const partList2 = container2.querySelector("g.label");
+  const instrumentText1 = partList1
+    ? Array.from(partList1.querySelectorAll<SVGTextElement>("tspan"))
+    : [];
+  const instrumentText2 = partList2
+    ? Array.from(partList2.querySelectorAll<SVGTextElement>("tspan"))
+    : [];
+
+  for (const [idx, d] of diff.credits.entries()) {
+    const it1 = instrumentText1[idx];
+    const it2 = instrumentText2[idx];
+    if (it1 && (d.changeType === "change" || d.changeType === "remove")) {
+      container1.appendChild(
+        createOverlay(it1, container1, d, showLineNumbers),
+      );
+    }
+    if (it2 && (d.changeType === "change" || d.changeType === "remove")) {
+      container2.appendChild(
+        createOverlay(it2, container2, d, showLineNumbers),
+      );
+    }
+  }
   // const partListTxt1 = partList1
   //
   // for (let i = 0; i < .length; i++) {

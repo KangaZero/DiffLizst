@@ -222,6 +222,31 @@ function normaliseLine(line: string, opts: XMLDiffOptions): string {
 }
 
 /**
+ * Find the 0-based line index of the Nth occurrence of `searchStr` in `xml`.
+ *
+ * Returns 0 if not found, so callers get relative line numbers as a fallback.
+ * The 0-based index is chosen so callers can do `offset + (1-based element line)`
+ * to get the correct 1-based file line number.
+ */
+function findLineOffset(
+  xml: string,
+  searchStr: string,
+  occurrence = 0,
+): number {
+  let count = 0;
+  let pos = 0;
+  while (true) {
+    const idx = xml.indexOf(searchStr, pos);
+    if (idx === -1) return 0;
+    if (count === occurrence) {
+      return (xml.slice(0, idx).match(/\n/g) ?? []).length;
+    }
+    count++;
+    pos = idx + 1;
+  }
+}
+
+/**
  * Compute the diff between two DOM Elements, respecting the provided options.
  *
  * Serialises both elements to string, splits into lines, runs the LCS diff,
@@ -234,6 +259,8 @@ function elementDiff(
   next: Element,
   label: string,
   opts: XMLDiffOptions,
+  offset1 = 0,
+  offset2 = 0,
 ): ElementDiff | null {
   const s1 = new XMLSerializer().serializeToString(old);
   const s2 = new XMLSerializer().serializeToString(next);
@@ -245,17 +272,22 @@ function elementDiff(
   const normLines1 = rawLines1.map((l) => normaliseLine(l, opts));
   const normLines2 = rawLines2.map((l) => normaliseLine(l, opts));
 
-  // Diff on normalised lines, then map result back to original content
+  // Diff on normalised lines, then map result back to original content.
+  // offset1/offset2 shift element-relative line numbers to file-absolute ones.
   const normalised = diffLines(normLines1, normLines2);
   let r1 = 0; // raw index pointer for old lines (0-based)
   let r2 = 0; // raw index pointer for new lines (0-based)
   const withRaw: DiffLine[] = normalised.map((dl) => {
     if (dl.type === "remove")
-      return { type: "remove", content: rawLines1[r1], oldLineNo: ++r1 };
+      return {
+        type: "remove",
+        content: rawLines1[r1],
+        oldLineNo: offset1 + ++r1,
+      };
     if (dl.type === "add")
-      return { type: "add", content: rawLines2[r2], newLineNo: ++r2 };
-    const oldLineNo = ++r1;
-    const newLineNo = ++r2;
+      return { type: "add", content: rawLines2[r2], newLineNo: offset2 + ++r2 };
+    const oldLineNo = offset1 + ++r1;
+    const newLineNo = offset2 + ++r2;
     return { type: "context", content: dl.content, oldLineNo, newLineNo };
   });
 
@@ -276,16 +308,15 @@ function singleSideDiff(
   el: Element,
   label: string,
   changeType: "add" | "remove",
+  offset = 0,
 ): ElementDiff {
   const raw = new XMLSerializer().serializeToString(el).split("\n");
-  const lines: DiffLine[] = raw
-    .map(
-      (content, i): DiffLine =>
-        changeType === "remove"
-          ? { type: "remove", content, oldLineNo: i + 1 }
-          : { type: "add", content, newLineNo: i + 1 },
-    )
-    .filter((l) => l.content.trim());
+  const lines: DiffLine[] = raw.map(
+    (content, i): DiffLine =>
+      changeType === "remove"
+        ? { type: "remove", content, oldLineNo: offset + i + 1 }
+        : { type: "add", content, newLineNo: offset + i + 1 },
+  );
   return { changeType, label, lines };
 }
 
@@ -428,12 +459,16 @@ export function diffXML(
         children,
       );
     } else if (m1 && m2) {
-      const d = elementDiff(m1, m2, `measure ${num}`, opts);
+      const o1 = findLineOffset(xml1, `<measure number="${num}"`);
+      const o2 = findLineOffset(xml2, `<measure number="${num}"`);
+      const d = elementDiff(m1, m2, `measure ${num}`, opts, o1, o2);
       if (d) measures.set(num, d);
     } else if (m1) {
-      measures.set(num, singleSideDiff(m1, `measure ${num}`, "remove"));
+      const o1 = findLineOffset(xml1, `<measure number="${num}"`);
+      measures.set(num, singleSideDiff(m1, `measure ${num}`, "remove", o1));
     } else if (m2) {
-      measures.set(num, singleSideDiff(m2, `measure ${num}`, "add"));
+      const o2 = findLineOffset(xml2, `<measure number="${num}"`);
+      measures.set(num, singleSideDiff(m2, `measure ${num}`, "add", o2));
     }
   }
 
@@ -447,12 +482,16 @@ export function diffXML(
     const c2 = credits2[i];
 
     if (c1 && c2) {
-      const d = elementDiff(c1, c2, `credit ${i}`, opts);
+      const o1 = findLineOffset(xml1, "<credit", i);
+      const o2 = findLineOffset(xml2, "<credit", i);
+      const d = elementDiff(c1, c2, `credit ${i}`, opts, o1, o2);
       if (d) credits.set(i, d);
     } else if (c1) {
-      credits.set(i, singleSideDiff(c1, `credit ${i}`, "remove"));
+      const o1 = findLineOffset(xml1, "<credit", i);
+      credits.set(i, singleSideDiff(c1, `credit ${i}`, "remove", o1));
     } else if (c2) {
-      credits.set(i, singleSideDiff(c2, `credit ${i}`, "add"));
+      const o2 = findLineOffset(xml2, "<credit", i);
+      credits.set(i, singleSideDiff(c2, `credit ${i}`, "add", o2));
     }
   }
 
@@ -464,12 +503,16 @@ export function diffXML(
     const p2 = partLists2[i];
 
     if (p1 && p2) {
-      const d = elementDiff(p1, p2, `part-list ${i}`, opts);
+      const o1 = findLineOffset(xml1, "<part-list", i);
+      const o2 = findLineOffset(xml2, "<part-list", i);
+      const d = elementDiff(p1, p2, `part-list ${i}`, opts, o1, o2);
       if (d) partLists.set(i, d);
     } else if (p1) {
-      partLists.set(i, singleSideDiff(p1, `part-list ${i}`, "remove"));
+      const o1 = findLineOffset(xml1, "<part-list", i);
+      partLists.set(i, singleSideDiff(p1, `part-list ${i}`, "remove", o1));
     } else if (p2) {
-      partLists.set(i, singleSideDiff(p2, `part-list ${i}`, "add"));
+      const o2 = findLineOffset(xml2, "<part-list", i);
+      partLists.set(i, singleSideDiff(p2, `part-list ${i}`, "add", o2));
     }
   }
   // ── Top-level elements (detailed mode only) ───────────────────────────

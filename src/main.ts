@@ -674,13 +674,13 @@ function splitCellHTML(
   line: DiffLine | undefined,
   side: "old" | "new",
 ): string {
+  const lineNo = currentSettings.showLineNumbers
+    ? `<span class="diff-page-gutter diff-line-no">${side === "old" ? (line?.oldLineNo ?? "?") : (line?.newLineNo ?? "?")}</span>`
+    : "";
   if (!line) {
-    return `<div class="diff-split-cell diff-line-empty"></div>`;
+    return `<div class="diff-split-cell diff-line-empty">${lineNo}</div>`;
   }
   const glyph = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
-  const lineNo = currentSettings.showLineNumbers
-    ? `<span class="diff-page-gutter diff-line-no">${side === "old" ? (line.oldLineNo ?? "") : (line.newLineNo ?? "")}</span>`
-    : "";
   return (
     `<div class="diff-split-cell diff-line-${line.type}">` +
     lineNo +
@@ -1062,8 +1062,9 @@ verovio.module.onRuntimeInitialized = async () => {
   toolkit = new verovio.toolkit();
   toolkit2 = new verovio.toolkit();
 
+  //NOTE: Default 1st render
   try {
-    originalXML = SAMPLE_SCORES[0]?.xml ?? null;
+    originalXML = SAMPLE_SCORES[2]?.xml ?? null;
     xMLToCompare = SAMPLE_SCORES[0]?.xml ?? null;
 
     const scale = Number(sharedScaleInput.value);
