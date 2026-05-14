@@ -1,7 +1,7 @@
 import {
   getEnhancedMusicXMLDiff,
   formatDiffForTerminal,
-} from "@/utils/MXMLDiffParser";
+} from "./MXMLDiffParser";
 
 const args = process.argv.slice(2);
 let enhancedDiff: string;

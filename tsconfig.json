@@ -36,6 +36,7 @@
     "src"
   ],
   "exclude": [
-    "src/commands/**"
+    "src/commands/**",
+    "src/scripts/**"
   ]
 }

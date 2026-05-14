@@ -12,7 +12,7 @@ import {
   getEnhancedMusicXMLDiff,
   formatDiffForTerminal,
   getMusicXMLDiffStats,
-} from "@/utils/MXMLDiffParser";
+} from "./MXMLDiffParser";
 
 const args = process.argv.slice(2);
 
