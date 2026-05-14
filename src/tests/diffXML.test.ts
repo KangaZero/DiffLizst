@@ -29,12 +29,15 @@ function makeXML({
   measure1Note = "<step>C</step><octave>4</octave>",
   measure2Note = "<step>E</step><octave>4</octave>",
   extraMeasure = "",
+  partName = "Piano",
 }: {
   creditText?: string;
   measure1Note?: string;
   measure2Note?: string;
   /** Raw XML to append as an extra <measure> inside <part>. */
   extraMeasure?: string;
+  /** Instrument name inside <part-name> — used to exercise the partLists diff path. */
+  partName?: string;
 } = {}): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise>
@@ -42,7 +45,7 @@ function makeXML({
     <credit-words>${creditText}</credit-words>
   </credit>
   <part-list>
-    <score-part id="P1"><part-name>Piano</part-name></score-part>
+    <score-part id="P1"><part-name>${partName}</part-name></score-part>
   </part-list>
   <part id="P1">
     <measure number="1">
@@ -55,6 +58,10 @@ function makeXML({
   </part>
 </score-partwise>`;
 }
+
+/** Load a score fixture relative to this test file. */
+const loadFixture = (path: string): Promise<string> =>
+  Bun.file(new URL(path, import.meta.url).pathname).text();
 
 // ─── Tests ────────────────────────────────────────────────────────────────
 
@@ -191,6 +198,81 @@ describe("diffXML", () => {
       expect(withWS.measures.size).toBeGreaterThanOrEqual(1);
       // With whitespace ignored: no difference (only indent changed)
       expect(withoutWS.measures.size).toBe(0);
+    });
+  });
+
+  // ── Phase 2: extended coverage ───────────────────────────────────────────
+
+  describe("cross-composer smoke test (real fixtures)", () => {
+    it("Chopin Op10No1 vs Rachmaninoff Op23No5 — produces measure diffs without throwing (plan Phase 2 criterion 1)", async () => {
+      const xml1 = await loadFixture("../scores/Chopin/etudeOp10No1.xml");
+      const xml2 = await loadFixture("../scores/Rachmaninoff/op23no5.xml");
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
+      expect(result.measures.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe("credit-only diff", () => {
+    it("only credits map is populated when measures are identical and credit text differs (plan Phase 2 criterion 2)", () => {
+      const xml1 = makeXML({ creditText: "Original Title" });
+      const xml2 = makeXML({ creditText: "Revised Title" });
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
+      expect(result.credits.size).toBe(1);
+      expect(result.measures.size).toBe(0);
+    });
+  });
+
+  describe("measure-only diff", () => {
+    it("only measures map is populated when credits are identical and a note pitch differs (plan Phase 2 criterion 3)", () => {
+      const xml1 = makeXML({ measure1Note: "<step>C</step><octave>4</octave>" });
+      const xml2 = makeXML({ measure1Note: "<step>F</step><octave>4</octave>" });
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
+      expect(result.measures.size).toBe(1);
+      expect(result.credits.size).toBe(0);
+    });
+  });
+
+  describe("detailedDiff mode", () => {
+    it("measures map is empty and children map is populated for a note change (plan Phase 2 criterion 4)", () => {
+      const xml1 = makeXML({ measure1Note: "<step>C</step><octave>4</octave>" });
+      const xml2 = makeXML({ measure1Note: "<step>G</step><octave>4</octave>" });
+      const result = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, detailedDiff: true });
+      expect(result.measures.size).toBe(0);
+      expect(result.children.size).toBeGreaterThan(0);
+    });
+
+    it("children map contains a key matching the note-key shape '1-note-0' for a measure-1 note change (plan Phase 2 criterion 5)", () => {
+      const xml1 = makeXML({ measure1Note: "<step>C</step><octave>4</octave>" });
+      const xml2 = makeXML({ measure1Note: "<step>A</step><octave>4</octave>" });
+      const result = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, detailedDiff: true });
+      expect([...result.children.keys()].some((k) => k === "1-note-0")).toBe(true);
+    });
+  });
+
+  describe("Chopin Op10No1 vs Op10No2 fixture smoke test", () => {
+    it("two different Chopin études produce measure diffs (plan Phase 2 criterion 6)", async () => {
+      const xml1 = await loadFixture("../scores/Chopin/etudeOp10No1.xml");
+      const xml2 = await loadFixture("../scores/Chopin/etudeOp10No2.xml");
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
+      expect(result.measures.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Rachmaninoff Op23No5 vs Op23No5V2 fixture smoke test", () => {
+    it("two versions of the same Rachmaninoff prelude produce measure diffs (plan Phase 2 criterion 7)", async () => {
+      const xml1 = await loadFixture("../scores/Rachmaninoff/op23no5.xml");
+      const xml2 = await loadFixture("../scores/Rachmaninoff/op23no5V2.xml");
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
+      expect(result.measures.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe("partLists diff", () => {
+    it("partLists map has one entry when part-name content differs (plan Phase 2 criterion 8)", () => {
+      const xml1 = makeXML({ partName: "Piano" });
+      const xml2 = makeXML({ partName: "Violin" });
+      const result = diffXML(xml1, xml2, DEFAULT_DIFF_OPTIONS);
+      expect(result.partLists.size).toBe(1);
     });
   });
 });
