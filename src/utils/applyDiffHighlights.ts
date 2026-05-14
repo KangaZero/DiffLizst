@@ -29,6 +29,18 @@ import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "./diffXML";
 /** Singleton tooltip element shared across all overlays. */
 let tooltipEl: HTMLDivElement | null = null;
 
+/** Both line-number variants cached per ElementDiff object. */
+const tooltipCache = new WeakMap<ElementDiff, { with: string; without: string }>();
+
+function cachedTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
+  let entry = tooltipCache.get(diff);
+  if (!entry) {
+    entry = { with: buildTooltipHTML(diff, true), without: buildTooltipHTML(diff, false) };
+    tooltipCache.set(diff, entry);
+  }
+  return showLineNumbers ? entry.with : entry.without;
+}
+
 /**
  * Return the singleton `#diff-tooltip` element, creating and appending it to
  * `<body>` on first call.
@@ -136,7 +148,7 @@ function createOverlay(
   showLineNumbers: boolean,
 ): HTMLDivElement {
   const tooltip = getTooltip();
-  const html = buildTooltipHTML(diff, showLineNumbers);
+  const html = cachedTooltipHTML(diff, showLineNumbers);
 
   const overlay = document.createElement("div");
   overlay.className = `diff-overlay diff-overlay--${diff.changeType}`;
@@ -300,7 +312,6 @@ export function applyDiffHighlights(
     c.querySelectorAll(".diff-overlay").forEach((el) => el.remove()),
   );
 
-  console.log("diff", diff);
   // ── Measures ──────────────────────────────────────────────────────────
   // Iterate only the g.measure elements present in the current page's SVG.
   // Each is resolved to its measure number via the id map — this correctly
@@ -348,11 +359,10 @@ export function applyDiffHighlights(
     }
   }
 
-  //TODO: add in the part=list as well as other tags needed
-  // ── Part Lists (Instrument Name) ─────────────────────────────────────────
-  // Verovio renders <credit> content as <text> elements inside g.pgHead.
-  // Only present on page 1 — on other pages querySelector returns null and
-  // texts arrays are empty, making the loop below a safe no-op.
+  // ── Part Lists (Instrument Names) ────────────────────────────────────────
+  // Verovio renders <part-list>/<score-instrument> content as <tspan> elements
+  // inside g.label. Same per-page caveat as credits — querySelector returns
+  // null on pages without the label group, making the loop a safe no-op.
   const partList1 = container1.querySelector("g.label");
   const partList2 = container2.querySelector("g.label");
   const instrumentText1 = partList1
@@ -362,7 +372,7 @@ export function applyDiffHighlights(
     ? Array.from(partList2.querySelectorAll<SVGTextElement>("tspan"))
     : [];
 
-  for (const [idx, d] of diff.credits.entries()) {
+  for (const [idx, d] of diff.partLists.entries()) {
     const it1 = instrumentText1[idx];
     const it2 = instrumentText2[idx];
     if (it1 && (d.changeType === "change" || d.changeType === "remove")) {
@@ -370,18 +380,12 @@ export function applyDiffHighlights(
         createOverlay(it1, container1, d, showLineNumbers),
       );
     }
-    if (it2 && (d.changeType === "change" || d.changeType === "remove")) {
+    if (it2 && (d.changeType === "change" || d.changeType === "add")) {
       container2.appendChild(
         createOverlay(it2, container2, d, showLineNumbers),
       );
     }
   }
-  // const partListTxt1 = partList1
-  //
-  // for (let i = 0; i < .length; i++) {
-  //   const element = array[i];
-  //
-  // }
   // ── Detailed child diffs (note / rest level) ───────────────────────────
   // Mirrors the measure overlay approach: iterate SVG elements on the current
   // page, resolve their diff key from the reverse map, then look up the diff.
