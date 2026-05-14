@@ -247,10 +247,49 @@ function findLineOffset(
 }
 
 /**
+ * Extract the raw XML substring for the Nth occurrence of an element.
+ *
+ * Used when `ignoreWhitespace: false` to bypass DOMParser normalisation —
+ * DOMParser silently discards insignificant whitespace text nodes, so
+ * `XMLSerializer` round-trips cannot preserve indent-only differences.
+ * Comparing raw input substrings directly is the only reliable fix.
+ *
+ * @param xml        Full raw XML input string.
+ * @param openSearch String that uniquely starts the element (e.g. `'<measure number="1"'`).
+ * @param closeTag   Closing tag string (e.g. `'</measure>'`).
+ * @param occurrence 0-based index when multiple elements share the same open pattern.
+ * @returns The raw substring from the opening tag through its closing tag, or `""` if not found.
+ */
+function sliceElement(
+  xml: string,
+  openSearch: string,
+  closeTag: string,
+  occurrence = 0,
+): string {
+  let count = 0;
+  let pos = 0;
+  while (true) {
+    const start = xml.indexOf(openSearch, pos);
+    if (start === -1) return "";
+    if (count === occurrence) {
+      const end = xml.indexOf(closeTag, start);
+      return end === -1 ? xml.slice(start) : xml.slice(start, end + closeTag.length);
+    }
+    count++;
+    pos = start + 1;
+  }
+}
+
+/**
  * Compute the diff between two DOM Elements, respecting the provided options.
  *
  * Serialises both elements to string, splits into lines, runs the LCS diff,
  * trims context, and returns an {@link ElementDiff}.
+ *
+ * When `ignoreWhitespace` is `false` and `rawStr1`/`rawStr2` are provided,
+ * the raw input substrings are used instead of re-serialising via XMLSerializer.
+ * This is required because DOMParser normalises insignificant whitespace during
+ * parsing, so XMLSerializer cannot recover indent-only differences from the DOM.
  *
  * @returns `null` when the two elements are identical.
  */
@@ -261,9 +300,12 @@ function elementDiff(
   opts: XMLDiffOptions,
   offset1 = 0,
   offset2 = 0,
+  rawStr1?: string,
+  rawStr2?: string,
 ): ElementDiff | null {
-  const s1 = new XMLSerializer().serializeToString(old);
-  const s2 = new XMLSerializer().serializeToString(next);
+  const useRaw = !opts.ignoreWhitespace && rawStr1 !== undefined && rawStr2 !== undefined;
+  const s1 = useRaw ? rawStr1 : new XMLSerializer().serializeToString(old);
+  const s2 = useRaw ? rawStr2 : new XMLSerializer().serializeToString(next);
   if (s1 === s2) return null;
 
   // Keep original lines for display but normalise for comparison
@@ -291,11 +333,10 @@ function elementDiff(
     return { type: "context", content: dl.content, oldLineNo, newLineNo };
   });
 
-  return {
-    changeType: "change",
-    label,
-    lines: trimContext(withRaw, opts.contextLines),
-  };
+  const trimmed = trimContext(withRaw, opts.contextLines);
+  // All differences were normalised away (e.g. whitespace-only with ignoreWhitespace: true)
+  if (trimmed.length === 0) return null;
+  return { changeType: "change", label, lines: trimmed };
 }
 
 /**
@@ -461,7 +502,9 @@ export function diffXML(
     } else if (m1 && m2) {
       const o1 = findLineOffset(xml1, `<measure number="${num}"`);
       const o2 = findLineOffset(xml2, `<measure number="${num}"`);
-      const d = elementDiff(m1, m2, `measure ${num}`, opts, o1, o2);
+      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, `<measure number="${num}"`, "</measure>");
+      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, `<measure number="${num}"`, "</measure>");
+      const d = elementDiff(m1, m2, `measure ${num}`, opts, o1, o2, r1, r2);
       if (d) measures.set(num, d);
     } else if (m1) {
       const o1 = findLineOffset(xml1, `<measure number="${num}"`);
@@ -484,7 +527,9 @@ export function diffXML(
     if (c1 && c2) {
       const o1 = findLineOffset(xml1, "<credit", i);
       const o2 = findLineOffset(xml2, "<credit", i);
-      const d = elementDiff(c1, c2, `credit ${i}`, opts, o1, o2);
+      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, "<credit", "</credit>", i);
+      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, "<credit", "</credit>", i);
+      const d = elementDiff(c1, c2, `credit ${i}`, opts, o1, o2, r1, r2);
       if (d) credits.set(i, d);
     } else if (c1) {
       const o1 = findLineOffset(xml1, "<credit", i);
@@ -505,7 +550,9 @@ export function diffXML(
     if (p1 && p2) {
       const o1 = findLineOffset(xml1, "<part-list", i);
       const o2 = findLineOffset(xml2, "<part-list", i);
-      const d = elementDiff(p1, p2, `part-list ${i}`, opts, o1, o2);
+      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, "<part-list", "</part-list>", i);
+      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, "<part-list", "</part-list>", i);
+      const d = elementDiff(p1, p2, `part-list ${i}`, opts, o1, o2, r1, r2);
       if (d) partLists.set(i, d);
     } else if (p1) {
       const o1 = findLineOffset(xml1, "<part-list", i);
