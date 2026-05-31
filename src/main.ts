@@ -26,7 +26,11 @@ import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 import { loadScoreFile } from "@/utils/loadScoreFile";
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
-import { DEFAULT_SETTINGS, type DiffSettingsValue } from "./components/diffSettings";
+import {
+  DEFAULT_SETTINGS,
+  type DiffSettings,
+  type DiffSettingsValue,
+} from "./components/diffSettings";
 import type { Pages } from "./components/pages";
 import type {
   Composer,
@@ -80,7 +84,7 @@ const scale1Input = document.querySelector<HTMLInputElement>("#scale-1")!;
 const scale1Output = document.querySelector<HTMLOutputElement>("#scale-1-value")!;
 const scale2Input = document.querySelector<HTMLInputElement>("#scale-2")!;
 const scale2Output = document.querySelector<HTMLOutputElement>("#scale-2-value")!;
-const diffSettingsEl = document.querySelector<HTMLElement>("diff-settings")!;
+const diffSettingsEl = document.querySelector<DiffSettings>("diff-settings")!;
 const viewToggleBtn = document.querySelector<HTMLButtonElement>("#view-toggle")!;
 const gitDiffToggleBtn = document.querySelector<HTMLButtonElement>("#git-diff-toggle")!;
 const diffPageEl = document.querySelector<HTMLElement>("#diff-page")!;
@@ -161,11 +165,6 @@ const state: NotationState = {
 
 const containers: [HTMLDivElement, HTMLDivElement] = [notationContainer, notationContainer2];
 
-// Guard against auto-switching when user has a saved preference.
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  if (window.localStorage.getItem("theme-preference")) return;
-});
-
 // ─── Monaco callbacks ──────────────────────────────────────────────────────
 
 function rerenderScore2Background(xml: string): void {
@@ -177,6 +176,7 @@ function rerenderScore2Background(xml: string): void {
     state.measureIdMap2 = buildMeasureIdMap(state.toolkit2);
     state.childIdMap2 = buildChildIdMap(state.toolkit2);
     reapplyDiff(state, containers, currentSettings.showLineNumbers);
+    enrichOverlays(containers);
   } catch {
     // XML is temporarily invalid while editing — skip silently
   }
@@ -590,8 +590,12 @@ verovio.module.onRuntimeInitialized = async () => {
   state.toolkit2 = new verovio.toolkit();
 
   try {
-    state.originalXML = SAMPLE_SCORES[2]?.xml ?? null;
-    state.xMLToCompare = SAMPLE_SCORES[0]?.xml ?? null;
+    // Select by id rather than positional index — glob ordering is
+    // filesystem-dependent and silently picks the wrong defaults when files
+    // are added or renamed.
+    const findScore = (id: string) => SAMPLE_SCORES.find((s) => s.id === id)?.xml ?? null;
+    state.originalXML = findScore("Chopin-etudeOp10No1V2") ?? SAMPLE_SCORES[0]?.xml ?? null;
+    state.xMLToCompare = findScore("Chopin-etudeOp10No1") ?? SAMPLE_SCORES[1]?.xml ?? null;
 
     const scale = Number(sharedScaleInput.value);
     updateScaleOutput(sharedScaleOutput, scale);

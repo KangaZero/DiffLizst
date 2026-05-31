@@ -6,7 +6,7 @@
  * option matrix against the real score fixtures and pins down regression
  * scenarios that have actually shipped bugs in the past.
  *
- * Run with: `bun test src/tests/diffXML.integration.test.ts`
+ * Run with: `pnpm vitest run src/tests/diffXML.integration.test.ts`
  */
 
 import { readFileSync } from "node:fs";
@@ -237,10 +237,9 @@ describe("diffXML integration", () => {
       const xml1 = await score("chopinOp10No1");
       const xml2 = await score("chopinOp10No2");
       const result = diffXML(xml1, xml2, asOptions(2, true, false));
-      // These two fixtures happen to have a part-list difference; we don't
-      // care which way it goes, only that the engine surfaces it as a Map
-      // entry (size ≥ 0 by construction; ≥ 1 is the meaningful assertion).
-      expect(result.partLists.size).toBeGreaterThanOrEqual(0);
+      // etudeOp10No1 names the instrument "Piano"; etudeOp10No2 uses
+      // "Violin" — diffXML must surface that as a partLists entry.
+      expect(result.partLists.size).toBeGreaterThanOrEqual(1);
     });
   });
 

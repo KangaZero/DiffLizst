@@ -481,12 +481,12 @@ test.describe("Page footer", () => {
     await expect(versionSpan).toHaveText(/^v\d+\.\d+\.\d+$|^dev$/, { timeout: 5_000 });
   });
 
-  test("footer contains Verovio, Monaco, and Bun attribution links", async ({ page }) => {
+  test("footer contains Verovio, Monaco, and Vite attribution links", async ({ page }) => {
     await page.goto("/");
     const footer = page.getByRole("contentinfo");
     await expect(footer.getByRole("link", { name: /verovio/i })).toBeAttached({ timeout: 5_000 });
     await expect(footer.getByRole("link", { name: /monaco/i })).toBeAttached({ timeout: 5_000 });
-    await expect(footer.getByRole("link", { name: /bun/i })).toBeAttached({ timeout: 5_000 });
+    await expect(footer.getByRole("link", { name: /vite/i })).toBeAttached({ timeout: 5_000 });
   });
 });
 

@@ -1,4 +1,4 @@
-import type { DiffSettingsValue } from "@/components/diffSettings";
+import type { DiffSettings, DiffSettingsValue } from "@/components/diffSettings";
 import type { DiffLine, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 
 // ─── HTML helpers ────────────────────────────────────────────────────────────
@@ -131,7 +131,11 @@ export function renderGitDiffPage(
   settings: DiffSettingsValue,
 ): void {
   const hasChanges =
-    xmlDiff && (xmlDiff.measures.size > 0 || xmlDiff.credits.size > 0 || xmlDiff.children.size > 0);
+    xmlDiff &&
+    (xmlDiff.measures.size > 0 ||
+      xmlDiff.credits.size > 0 ||
+      xmlDiff.partLists.size > 0 ||
+      xmlDiff.children.size > 0);
 
   if (!xmlDiff || !hasChanges) {
     hunksEl.innerHTML = `<p class="diff-page-empty">No differences found between the two scores.</p>`;
@@ -148,6 +152,11 @@ export function renderGitDiffPage(
     .map(([, d]) => hunkFn(d))
     .join("");
 
+  const partListHunks = [...xmlDiff.partLists.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, d]) => hunkFn(d))
+    .join("");
+
   const measureHunks = [...xmlDiff.measures.entries()]
     .sort(([a], [b]) => a - b)
     .map(([, d]) => hunkFn(d))
@@ -158,7 +167,7 @@ export function renderGitDiffPage(
     .map(([, d]) => hunkFn(d))
     .join("");
 
-  hunksEl.innerHTML = creditHunks + measureHunks + childHunks;
+  hunksEl.innerHTML = creditHunks + partListHunks + measureHunks + childHunks;
   hunksEl.classList.toggle("is-split", isSplit);
 }
 
@@ -175,7 +184,7 @@ export function renderGitDiffPage(
  */
 export function wireGitDiffSplitToggle(
   btn: HTMLButtonElement,
-  diffSettingsEl: HTMLElement,
+  diffSettingsEl: DiffSettings,
   getState: () => DiffSettingsValue,
   setState: (s: DiffSettingsValue) => void,
   onToggle: () => void,
@@ -188,8 +197,7 @@ export function wireGitDiffSplitToggle(
       gitDiffOrientation: next,
     };
     setState(updated);
-    // Push the change back into the settings panel so the gear UI stays in sync
-    (diffSettingsEl as unknown as { value: DiffSettingsValue }).value = updated;
+    diffSettingsEl.value = updated;
     btn.setAttribute("aria-pressed", String(next === "split"));
     btn.textContent = next === "split" ? "Unified" : "Split";
     onToggle();

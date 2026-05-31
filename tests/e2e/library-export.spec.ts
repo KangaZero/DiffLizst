@@ -14,7 +14,7 @@ import { expect, test } from "@playwright/test";
  * reporting alongside the e2e suite.
  *
  * The test depends on `dist-lib/lib.js` and `dist-lib/lib.d.ts` existing —
- * the `webServer.command` in playwright.config.ts runs `bun run build`
+ * the `webServer.command` in playwright.config.ts runs `pnpm run build`
  * which only produces the web bundle. So this spec triggers `build:lib`
  * before its first assertion.
  */
@@ -22,7 +22,7 @@ import { expect, test } from "@playwright/test";
 test.describe("library export", () => {
   test.beforeAll(async () => {
     const { execSync } = await import("node:child_process");
-    execSync("bun run build:lib", {
+    execSync("pnpm run build:lib", {
       cwd: fileURLToPath(new URL("../..", import.meta.url)),
       stdio: "inherit",
     });
