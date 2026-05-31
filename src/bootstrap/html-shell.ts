@@ -3,7 +3,16 @@
  *
  * Kept here so main.ts can be read top-to-bottom as wiring code without
  * wading through 70+ lines of markup.
+ *
+ * `__APP_VERSION__` is replaced at build time by Vite (`define` config) and
+ * falls back to "dev" during `bun run dev`, so the footer always shows
+ * something meaningful.
  */
+
+declare const __APP_VERSION__: string;
+const APP_VERSION: string = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
+const REPO_URL = "https://github.com/KangaZero/DiffLizst";
+
 export const APP_HTML = `
 <header id="toolbar">
   <div class="toolbar-start">
@@ -106,4 +115,18 @@ export const APP_HTML = `
 </section>
 <div class="ticks"></div>
 <section id="spacer"></section>
+<footer class="app-footer" role="contentinfo">
+  <div class="app-footer-inner">
+    <a class="app-footer-link" href="${REPO_URL}" target="_blank" rel="noopener noreferrer">GitHub</a>
+    <span class="app-footer-sep" aria-hidden="true">·</span>
+    <span class="app-footer-version">v${APP_VERSION}</span>
+    <span class="app-footer-sep" aria-hidden="true">·</span>
+    <span class="app-footer-credits">
+      Powered by
+      <a class="app-footer-link" href="https://www.verovio.org/" target="_blank" rel="noopener noreferrer">Verovio</a>,
+      <a class="app-footer-link" href="https://microsoft.github.io/monaco-editor/" target="_blank" rel="noopener noreferrer">Monaco</a>,
+      <a class="app-footer-link" href="https://bun.com/" target="_blank" rel="noopener noreferrer">Bun</a>
+    </span>
+  </div>
+</footer>
 `;

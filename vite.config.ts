@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
@@ -11,8 +12,27 @@ import dts from "vite-plugin-dts";
  * Library mode emits .d.ts via `vite-plugin-dts` and keeps verovio + monaco-editor
  * external — they're app-level concerns, not library concerns.
  */
+
+/**
+ * Read package.json once and expose the version string to the app shell via
+ * Vite's `define`. Beats hard-coding the version in two places (or pulling
+ * `package.json` in at runtime, which inflates the bundle).
+ */
+function readPackageVersion(): string {
+  try {
+    const pkg: unknown = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf-8"));
+    if (pkg && typeof pkg === "object" && "version" in pkg && typeof pkg.version === "string") {
+      return pkg.version;
+    }
+  } catch {
+    // Fall through to "dev".
+  }
+  return "dev";
+}
+
 export default defineConfig(({ mode }) => {
   const alias = { "@": path.resolve(__dirname, "src") };
+  const appVersion = readPackageVersion();
 
   if (mode === "lib") {
     return {
@@ -51,5 +71,8 @@ export default defineConfig(({ mode }) => {
   return {
     base: "/DiffLizst/",
     resolve: { alias },
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+    },
   };
 });
