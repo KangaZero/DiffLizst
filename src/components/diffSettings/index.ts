@@ -223,6 +223,32 @@ template.innerHTML = `
     padding: 4px 14px 6px;
     font-style: italic;
   }
+
+  /* WCAG 2.2 SC 2.5.8 — 44×44 px minimum touch targets on coarse-pointer devices */
+  @media (pointer: coarse) {
+    .trigger {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .row {
+      min-height: 44px;
+      cursor: pointer;
+    }
+
+    input[type="checkbox"] {
+      width: 24px;
+      height: 24px;
+    }
+
+    input[type="number"] {
+      min-height: 44px;
+    }
+
+    select {
+      min-height: 44px;
+    }
+  }
 </style>
 
 <button class="trigger" type="button" aria-label="Diff settings" aria-expanded="false" aria-haspopup="true">

@@ -1703,10 +1703,8 @@ code {
     min-height: 44px;
   }
 
-  /* Score loader trigger and diff-settings trigger are inside Shadow DOM;
-   * we can't resize them here. The host elements inherit coarse-pointer
-   * scaling from their own internal CSS which already uses 38/28px sizes.
-   * Flagged for follow-up: shadow DOM components need internal coarse-pointer rules. */
+  /* Score loader and diff-settings are inside Shadow DOM; their coarse-pointer
+   * rules live in each component's own <style> block (WCAG 2.2 SC 2.5.8). */
 }
 
 /* ─── prefers-reduced-motion: disable slide + pulse animations ──────────── */

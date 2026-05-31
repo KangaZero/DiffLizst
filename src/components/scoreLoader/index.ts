@@ -250,9 +250,29 @@ template.innerHTML = `
   input[type="file"] {
     display: none;
   }
+
+  /* WCAG 2.2 SC 2.5.8 — 44×44 px minimum touch targets on coarse-pointer devices */
+  @media (pointer: coarse) {
+    .trigger {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    summary {
+      min-height: 44px;
+    }
+
+    .sample-btn {
+      min-height: 44px;
+    }
+
+    .upload-row {
+      min-height: 44px;
+    }
+  }
 </style>
 
-<button class="trigger" type="button" aria-haspopup="true" aria-expanded="false">
+<button class="trigger" type="button" aria-label="Load score" aria-haspopup="true" aria-expanded="false">
   ${MUSIC_ICON}
   Load Score
 </button>
