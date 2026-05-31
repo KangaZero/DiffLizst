@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
+import { VitePWA } from "vite-plugin-pwa";
 
 /**
  * Two build modes share one config.
@@ -75,6 +76,62 @@ export default defineConfig(({ mode }) => {
         "abap,apex,azcli,bat,bicep,cameligo,clojure,coffee,cpp,csharp,csp,css,cypher,dart,dockerfile,ecl,elixir,flow9,freemarker2,fsharp,go,graphql,handlebars,hcl,html,ini,java,javascript,julia,kotlin,less,lexon,liquid,lua,m3,markdown,mdx,mips,msdax,mysql,objective-c,pascal,pascaligo,perl,pgsql,php,pla,postiats,powerquery,powershell,proto,pug,python,qsharp,r,razor,redis,redshift,restructuredtext,ruby,rust,sb,scala,scheme,scss,shell,solidity,sophia,sparql,sql,st,swift,systemverilog,tcl,twig,typescript,vb,wgsl,xml-unused,yaml",
       ),
     },
+    plugins: [
+      VitePWA({
+        registerType: "autoUpdate",
+        injectRegister: "auto",
+        base: "/DiffLizst/",
+        scope: "/DiffLizst/",
+        manifest: {
+          name: "DiffLizst",
+          short_name: "DiffLizst",
+          description: "Visual diff for MusicXML files — runs entirely in your browser.",
+          id: "/DiffLizst/",
+          start_url: "/DiffLizst/",
+          scope: "/DiffLizst/",
+          display: "standalone",
+          display_override: ["window-controls-overlay", "standalone"],
+          background_color: "#16171d",
+          theme_color: "#9b35f5",
+          categories: ["productivity", "music", "developer-tools"],
+          icons: [
+            { src: "pwa-64x64.png", sizes: "64x64", type: "image/png" },
+            { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
+            { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
+            {
+              src: "pwa-maskable-192x192.png",
+              sizes: "192x192",
+              type: "image/png",
+              purpose: "maskable",
+            },
+            {
+              src: "pwa-maskable-512x512.png",
+              sizes: "512x512",
+              type: "image/png",
+              purpose: "maskable",
+            },
+          ],
+        },
+        workbox: {
+          // The main bundle contains Verovio WASM and exceeds the 2 MB default.
+          // 15 MB covers the ~13 MB entry chunk + all Monaco lazy chunks.
+          maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,wasm,xml}"],
+          runtimeCaching: [
+            {
+              urlPattern: /monaco-editor/,
+              handler: "CacheFirst",
+              options: {
+                cacheName: "monaco-editor-cache",
+                expiration: {
+                  maxAgeSeconds: 30 * 24 * 60 * 60,
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ],
     build: {
       // Monaco's lazy chunk is ~8 MB unminified. Raising the limit avoids a
       // spurious warning for the Monaco async chunk while still catching

@@ -62,6 +62,24 @@ pnpm dev
 
 Open `http://localhost:5173/DiffLizst/`. Two Chopin études load by default. Drop your own `.xml` / `.musicxml` / `.mxl` files on either score panel to diff anything else.
 
+### Install as PWA
+
+DiffLizst is installable as a Progressive Web App — it works offline once you've loaded it once online.
+
+**Chrome / Edge (desktop):** click the install icon in the address bar, or open the browser menu and choose "Install DiffLizst".
+
+**Safari on iOS / iPadOS:** tap the Share button → "Add to Home Screen".
+
+**Firefox:** open the address bar menu → "Install".
+
+Once installed, the app launches in standalone mode (no browser chrome) and the service worker serves the app shell, bundled scores, and Verovio WASM from cache. Reload any time — the SW keeps the cached copy fresh silently in the background (`autoUpdate` strategy).
+
+**Regenerate icons** (only needed when `public/favicon.svg` changes):
+
+```bash
+pnpm pwa-assets-generate
+```
+
 ---
 
 ## Keyboard shortcuts

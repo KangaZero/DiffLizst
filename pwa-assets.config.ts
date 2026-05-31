@@ -1,5 +1,5 @@
-import { defineConfig, minimal2023Preset } from "@vite-pwa/assets-generator/config";
 import type { AssetType, ResolvedAssetSize } from "@vite-pwa/assets-generator/config";
+import { defineConfig, minimal2023Preset } from "@vite-pwa/assets-generator/config";
 
 function assetName(type: AssetType, size: ResolvedAssetSize): string {
   switch (type) {
