@@ -666,11 +666,12 @@ code {
   user-select: none;
 }
 
+/* Verovio renders the SVG at the dimensions implied by toolkit `scale`.
+ * Constraining width here would defeat the scale slider — overflow scroll
+ * on `.notation-stage` handles oversized scores instead. */
 .notation-stage svg {
   display: block;
-  width: 100%;
   height: auto;
-  max-width: 100%;
 }
 
 /* ─── Toolbar view-toggle button ──────────────────────────────── */
