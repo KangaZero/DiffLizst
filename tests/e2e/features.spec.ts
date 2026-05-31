@@ -930,3 +930,66 @@ test.describe("Print stylesheet", () => {
     await expect(toolbar).toBeHidden();
   });
 });
+
+// ─── Annotation system ────────────────────────────────────────────────────
+
+test.describe("Annotation system", () => {
+  test("adding an annotation on a measure shows the marker, which persists on reload and disappears on delete", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Find a diff-summary row that has an annotation "+" button (a measure-level change).
+    const addBtn = page.locator(".annotation-add-btn").first();
+    await expect(addBtn).toBeAttached({ timeout: 10_000 });
+
+    // Open the popover via the "+" button.
+    await addBtn.scrollIntoViewIfNeeded();
+    await addBtn.click({ force: true });
+
+    // Popover should be visible — scoped to the annotation-manager shadow root.
+    const mgr = page.locator("annotation-manager");
+    await expect(mgr).toBeAttached({ timeout: 5_000 });
+
+    const textarea = mgr.locator("textarea#ann-textarea");
+    await expect(textarea).toBeAttached({ timeout: 5_000 });
+
+    // Type a note and save.
+    await textarea.fill("test annotation note");
+    const saveBtn = mgr.locator("#ann-save");
+    await saveBtn.click();
+
+    // An annotation marker dot should now appear on the notation stage.
+    await expect(page.locator(".annotation-marker").first()).toBeAttached({ timeout: 5_000 });
+
+    // Reload the page — the annotation marker should still be present (persisted in localStorage).
+    await page.reload();
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+    await expect(page.locator(".annotation-marker").first()).toBeAttached({ timeout: 10_000 });
+
+    // Open the popover for that measure via the marker.
+    const marker = page.locator(".annotation-marker").first();
+    await marker.click();
+
+    // The popover should list the saved annotation.
+    const annotationText = mgr.locator(".annotation-item-text").first();
+    await expect(annotationText).toHaveText("test annotation note", { timeout: 5_000 });
+
+    // Delete the annotation.
+    const deleteBtn = mgr.locator(".btn-delete").first();
+    await deleteBtn.click();
+
+    // After deletion the list should show the empty state.
+    await expect(mgr.locator(".empty-note")).toBeVisible({ timeout: 3_000 });
+
+    // Close the popover.
+    const cancelBtn = mgr.locator("#ann-cancel");
+    await cancelBtn.click();
+
+    // The marker should be gone from the page.
+    await expect(page.locator(".annotation-marker")).toHaveCount(0, { timeout: 5_000 });
+  });
+});

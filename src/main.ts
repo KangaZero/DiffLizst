@@ -31,12 +31,14 @@ import {
 } from "@/bootstrap/notation-pipeline";
 import { wireScrollSync } from "@/bootstrap/scroll-sync";
 import { wireSplitter } from "@/bootstrap/splitter";
+import { type AnnotationManager, diffKeyFor } from "@/components/annotations";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap, getOverlayRecords } from "@/utils/applyDiffHighlights";
 import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 import { loadScoreFile } from "@/utils/loadScoreFile";
+import { computeScoreStats } from "@/utils/scoreStats";
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
 import {
   DEFAULT_SETTINGS,
@@ -185,6 +187,15 @@ const state: NotationState = {
 };
 
 const containers: [HTMLDivElement, HTMLDivElement] = [notationContainer, notationContainer2];
+
+// ─── Annotation manager ────────────────────────────────────────────────────
+
+const annotationMgr = document.createElement("annotation-manager") as AnnotationManager;
+document.body.appendChild(annotationMgr);
+
+annotationMgr.addEventListener("annotations-change", () => {
+  annotationMgr.refresh(containers);
+});
 
 // ─── Hover-link wiring ─────────────────────────────────────────────────────
 // Overlay → Monaco and Monaco → overlay listeners are rebuilt after every
@@ -493,7 +504,54 @@ function refreshChangeNav(): void {
   nextChangeBtn.disabled = currentChanges.length === 0;
   swapScoresBtn.disabled = !state.originalXML || !state.xMLToCompare;
   diffSummary.refresh(currentChanges);
+
+  const filename1 =
+    document.querySelector<HTMLElement>(".diff-file-old")?.textContent?.trim() ?? "Score 1";
+  const filename2 =
+    document.querySelector<HTMLElement>(".diff-file-new")?.textContent?.trim() ?? "Score 2";
+
+  diffSummary.refreshStats(
+    state.originalXML ? { stats: computeScoreStats(state.originalXML), filename: filename1 } : null,
+    state.xMLToCompare
+      ? { stats: computeScoreStats(state.xMLToCompare), filename: filename2 }
+      : null,
+  );
+
   enrichOverlays(containers);
+
+  const leftId = filename1 || "score-1";
+  const rightId = filename2 || "score-2";
+  annotationMgr.diffKey = diffKeyFor(leftId, rightId);
+  annotationMgr.refresh(containers);
+  addAnnotationButtons();
+}
+
+/**
+ * Append a "+" annotation button to each diff summary list item that has a
+ * measure number. Runs after `diffSummary.refresh()` so the list is populated.
+ * Buttons are idempotent — existing ones are not duplicated.
+ */
+function addAnnotationButtons(): void {
+  const list = diffSummaryAside.querySelector<HTMLOListElement>("#diff-summary-list");
+  if (!list) return;
+  for (const li of list.querySelectorAll<HTMLLIElement>("li[data-change-id]")) {
+    if (li.querySelector(".annotation-add-btn")) continue;
+    const changeId = li.dataset.changeId;
+    const entry = currentChanges.find((c) => c.id === changeId);
+    if (!entry?.measureNumber) continue;
+    const measure = entry.measureNumber;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "annotation-add-btn";
+    btn.setAttribute("aria-label", `Add annotation to measure ${measure}`);
+    btn.title = `Add annotation to measure ${measure}`;
+    btn.textContent = "+";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      annotationMgr.openForMeasure(measure, btn);
+    });
+    li.appendChild(btn);
+  }
 }
 
 function updateChangeCounter(): void {

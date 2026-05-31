@@ -558,6 +558,118 @@ code {
   white-space: nowrap;
 }
 
+/* ─── Score statistics block (inside diff summary sidebar) ─────────────── */
+
+.score-stats-details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.score-stats-summary {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-h);
+  cursor: pointer;
+  list-style: none;
+  padding: var(--space-1) 0;
+  user-select: none;
+}
+
+/* Remove default marker cross-browser */
+.score-stats-summary::-webkit-details-marker {
+  display: none;
+}
+
+.score-stats-summary::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: var(--space-2);
+  font-size: 10px;
+  transition: transform var(--duration-fast);
+  color: var(--text-muted);
+}
+
+.score-stats-details[open] .score-stats-summary::before {
+  transform: rotate(90deg);
+}
+
+.score-stats-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.score-stats-body {
+  padding-top: var(--space-2);
+}
+
+.score-stats-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.score-stats-side {
+  min-width: 0;
+}
+
+.score-stats-filename {
+  font-size: var(--font-size-xs);
+  font-family: var(--mono);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0 0 var(--space-1);
+}
+
+.score-stats-filename--left {
+  color: var(--notation-diff-remove);
+}
+
+.score-stats-filename--right {
+  color: var(--notation-diff-add);
+}
+
+.score-stats-dl {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.score-stats-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.score-stats-term {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.score-stats-def {
+  font-size: var(--font-size-xs);
+  font-family: var(--mono);
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .score-stats-summary::before {
+    transition: none;
+  }
+}
+
 .notation-panel {
   display: flex;
   flex-direction: column;
@@ -1906,5 +2018,93 @@ code {
 @media (max-width: 600px) {
   .measure-jump-input {
     display: none;
+  }
+}
+
+/* ─── Annotation markers and sidebar add button ─────────────────────────── */
+
+/* Small accent-coloured dot pinned to the top-right corner of the measure
+ * overlay area. Only shown when at least one annotation exists.
+ * 8px diameter, accent colour for both light and dark themes. */
+.annotation-marker {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  opacity: 0.85;
+  z-index: var(--z-overlay);
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
+}
+
+.annotation-marker:hover {
+  opacity: 1;
+  transform: scale(1.4);
+}
+
+.annotation-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .annotation-marker {
+    transition: none;
+  }
+}
+
+/* "+" button appended to diff summary sidebar rows for annotatable measures */
+.annotation-add-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.diff-summary-item:hover .annotation-add-btn,
+.annotation-add-btn:focus-visible {
+  opacity: 1;
+}
+
+.annotation-add-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.annotation-add-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .annotation-add-btn {
+    opacity: 1;
+    min-width: 28px;
+    min-height: 28px;
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media print {
+  .annotation-marker,
+  .annotation-add-btn {
+    display: none !important;
   }
 }
