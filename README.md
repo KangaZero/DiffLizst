@@ -20,8 +20,8 @@ your own tools.
 ## Quickstart (web app)
 
 ```sh
-bun install
-bun run dev
+pnpm install
+pnpm dev
 ```
 
 Then open `http://localhost:5173/DiffLizst/`. Two Chopin études load by
@@ -31,8 +31,8 @@ default — use the score-loader dropdowns or drop your own `.xml` /
 To produce a production build:
 
 ```sh
-bun run build      # → dist/ — what GitHub Pages serves
-bun run preview    # serves dist/ locally on :4173 for sanity check
+pnpm run build      # → dist/ — what GitHub Pages serves
+pnpm run preview    # serves dist/ locally on :4173 for sanity check
 ```
 
 ## Using the diff core as a library
@@ -40,7 +40,7 @@ bun run preview    # serves dist/ locally on :4173 for sanity check
 ```sh
 npm add @kangazero/difflizst-core
 # or
-bun add @kangazero/difflizst-core
+pnpm add @kangazero/difflizst-core
 ```
 
 ```ts
@@ -66,7 +66,7 @@ for (const [measureNumber, diff] of result.measures) {
 The library is **browser-native** — it uses `DOMParser` and `XMLSerializer`
 from the browser globals. To use it under Node or Bun, polyfill those (we
 recommend [linkedom](https://github.com/WebReflection/linkedom), which is
-what our own bun tests use; see `src/tests/setup.ts` for a 12-line
+what our own vitest tests use; see `src/tests/setup.ts` for a 12-line
 adapter).
 
 ### Public API surface
@@ -86,10 +86,10 @@ adapter).
 
 DiffLizst has two test suites that run independently.
 
-### Unit + integration (bun test)
+### Unit + integration (vitest)
 
 ```sh
-bun run test:unit
+pnpm run test:unit
 ```
 
 61 tests covering the diff core: option-matrix combinations against real
@@ -101,16 +101,16 @@ and pure DOM-helper unit tests.
 First time only (downloads ~100 MB of chromium):
 
 ```sh
-bun run test:e2e:install
+pnpm run test:e2e:install
 ```
 
 Then:
 
 ```sh
-bun run test:e2e
+pnpm run test:e2e
 ```
 
-8 specs drive the actual built bundle via `bun run preview`: app boots,
+8 specs drive the actual built bundle via `pnpm run preview`: app boots,
 verovio renders, overlay highlights appear, Monaco and git-diff toggles
 work, scale slider re-applies overlays, settings re-render correctly, and
 the library bundle imports cleanly from `dist-lib/`.
@@ -118,7 +118,7 @@ the library bundle imports cleanly from `dist-lib/`.
 ### Run everything (the pre-push gate)
 
 ```sh
-bun run verify     # lint + typecheck + unit + build + build:lib
+pnpm run verify     # lint + typecheck + unit + build + build:lib
 ```
 
 (e2e is intentionally not in `verify` — it takes ~30 s and requires
@@ -144,7 +144,7 @@ src/
 tests/
 └── e2e/                      # Playwright specs
 
-src/tests/                    # bun test specs (unit + integration)
+src/tests/                    # vitest specs (unit + integration)
 ```
 
 `tsconfig.json` excludes `src/scripts/` and `src/commands/` from the
@@ -155,7 +155,7 @@ project build — they're investigation-era utilities, not shipped code.
 Three workflows live under `.github/workflows/`:
 
 - **`ci.yml`** — runs on every push and PR. Five independent jobs: lint
-  (Biome), typecheck (`tsc --noEmit`), unit tests (`bun test`), Playwright
+  (Biome), typecheck (`tsc --noEmit`), unit tests (`vitest`), Playwright
   e2e (chromium), and a build that uploads `dist/` and `dist-lib/` as
   artifacts. Each red signal points at one stage.
 - **`deploy.yml`** — runs on push to `main`. Builds and deploys the web
@@ -178,13 +178,14 @@ Three workflows live under `.github/workflows/`:
 ## Stack
 
 - TypeScript 6 (strict, no `any`).
-- [Bun](https://bun.sh/) for installs, dev server, scripts, and test runner.
+- [pnpm 11](https://pnpm.io/) for package management.
 - [Vite 8](https://vitejs.dev/) for the web app and library builds.
 - [Verovio 6](https://www.verovio.org/) for engraving the SVG scores.
 - [Monaco Editor 0.55](https://microsoft.github.io/monaco-editor/) for the raw-diff view.
 - [Biome 2](https://biomejs.dev/) for lint + format.
 - [Playwright 1.60](https://playwright.dev/) for end-to-end testing.
-- [linkedom](https://github.com/WebReflection/linkedom) for DOM polyfills under bun's test runner.
+- [Vitest 4](https://vitest.dev/) for unit + integration tests.
+- [linkedom](https://github.com/WebReflection/linkedom) for DOM polyfills under vitest's Node environment.
 
 ## License
 
