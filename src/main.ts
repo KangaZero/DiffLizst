@@ -1,258 +1,110 @@
-/**
- * Application entry point for MusicDiff.
- *
- * Responsibilities:
- *  1. Bootstrap the Verovio WASM toolkit and render two MusicXML scores
- *     side-by-side.
- *  2. Compute a structural diff between the two scores and overlay visual
- *     highlights on changed measures and header text.
- *  3. Wire up shared and per-score scale controls, pagination, theme toggle,
- *     and the diff-settings panel.
- */
-
-// ─── Styles & side-effect imports ─────────────────────────────────────────
 import "./style.css";
 import "./components/notation/note";
 import "./components/themeToggle";
 import "./components/pages";
 import "./components/diffSettings";
 import "./components/scoreLoader";
+import type { toolkit as Toolkit } from "verovio";
+import * as verovio from "verovio";
+import { renderGitDiffPage, wireGitDiffSplitToggle } from "@/bootstrap/git-diff-page";
+import { wireOverlayToMonaco } from "@/bootstrap/hover-link";
+import { APP_HTML } from "@/bootstrap/html-shell";
+import { loadMonaco } from "@/bootstrap/monaco-lazy";
+import {
+  getHoverHighlighter,
+  getMonacoDiffEditor,
+  refreshHoverLink,
+  renderCodeDiffPage,
+  wireEditToggle,
+} from "@/bootstrap/monaco-page";
+import {
+  type NotationState,
+  reapplyDiff,
+  reloadScore,
+  renderNotation,
+  rescale,
+  runDiff,
+  swapScores,
+  updateScaleOutput,
+} from "@/bootstrap/notation-pipeline";
+import { wireScrollSync } from "@/bootstrap/scroll-sync";
+import { wireDiffSummary } from "@/components/diffSummary";
+import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
+import { buildChildIdMap, buildMeasureIdMap, getOverlayRecords } from "@/utils/applyDiffHighlights";
+import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
+import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
+import { loadScoreFile } from "@/utils/loadScoreFile";
+import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
+import {
+  DEFAULT_SETTINGS,
+  type DiffSettings,
+  type DiffSettingsValue,
+} from "./components/diffSettings";
+import type { Pages } from "./components/pages";
 import type {
-  ScoreLoader,
-  ScoreLoaderSample,
-  ScoreLoadDetail,
   Composer,
   MXML,
+  ScoreLoadDetail,
+  ScoreLoader,
+  ScoreLoaderSample,
 } from "./components/scoreLoader";
 
-// ─── Utilities ────────────────────────────────────────────────────────────
-import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
-import { getTotalPageCount } from "@/utils/getTotalPageCount";
-import {
-  diffXML,
-  type XMLDiffOptions,
-  type XMLDiffResult,
-  type ElementDiff,
-  type DiffLine,
-  type ChildDiffKey,
-} from "@/utils/diffXML";
-import {
-  applyDiffHighlights,
-  buildMeasureIdMap,
-  buildChildIdMap,
-} from "@/utils/applyDiffHighlights";
-
-// ─── Monaco editor ────────────────────────────────────────────────────────
-// Register Monaco's web worker before the editor is created.
-// Vite handles `?worker` imports natively — no plugin needed.
-// XML only needs the base editor worker (no separate language server).
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-
-self.MonacoEnvironment = {
-  getWorker(_id: string, _label: string): Worker {
-    return new EditorWorker();
-  },
-};
-
-import * as monaco from "monaco-editor";
-
-// ─── Verovio ──────────────────────────────────────────────────────────────
-import * as verovio from "verovio";
-import { type VerovioOptions, toolkit as Toolkit } from "verovio";
-
 // ─── Score sources ─────────────────────────────────────────────────────────
-// Vite's import.meta.glob statically discovers every XML under src/scores/ at
-// build time. Adding a new score is just dropping a file in the right folder:
-//   src/scores/<Composer>/<label>.xml
-// No manual import or array entry needed.
 const _scoreModules = import.meta.glob<string>("./scores/**/*.xml", {
   query: "?raw",
   import: "default",
   eager: true,
 });
 
-const SAMPLE_SCORES: ScoreLoaderSample[] = Object.entries(_scoreModules).map(
-  ([path, xml]) => {
-    const segments = path.split("/");
-    const composer = segments[segments.length - 2] as Composer;
-    const label = segments[segments.length - 1].replace(/\.xml$/i, "");
-    return {
-      id: `${composer}-${label}` as `${Composer}-${string}`,
-      composer,
-      label,
-      xml: xml as MXML,
-    };
-  },
-);
-
-import type { Pages } from "./components/pages";
-import {
-  DEFAULT_SETTINGS,
-  type DiffSettingsValue,
-} from "./components/diffSettings";
+const SAMPLE_SCORES: ScoreLoaderSample[] = Object.entries(_scoreModules).map(([path, xml]) => {
+  const segments = path.split("/");
+  const composer = segments[segments.length - 2] as Composer;
+  const label = segments[segments.length - 1].replace(/\.xml$/i, "");
+  return {
+    id: `${composer}-${label}` as `${Composer}-${string}`,
+    composer,
+    label,
+    xml: xml as MXML,
+  };
+});
 
 // ─── DOM bootstrap ────────────────────────────────────────────────────────
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element not found");
 
-/**
- * Static HTML shell. Pagination components and runtime state are injected
- * below after `verovio.module.onRuntimeInitialized` fires.
- *
- * Layout:
- *  - `#toolbar`          – app title, diff-settings gear, theme toggle
- *  - `.shared-controls`  – scale slider that moves both scores together
- *  - `#next-steps`       – two-column layout, one column per score
- *    - each column: individual scale + pagination (injected) + notation-stage
- */
-app.innerHTML = `
-<header id="toolbar">
-  <div class="toolbar-start">
-    <span class="app-title">MusicDiff</span>
-    <button
-      id="view-toggle"
-      class="view-toggle-btn"
-      type="button"
-      aria-label="Monaco diff view"
-      aria-pressed="false"
-      title="Monaco diff editor"
-    >
-      <!-- Lucide "code-xml" -->
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-           fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="m18 16 4-4-4-4"/>
-        <path d="m6 8-4 4 4 4"/>
-        <path d="m14.5 4-5 16"/>
-      </svg>
-    </button>
-    <button
-      id="git-diff-toggle"
-      class="view-toggle-btn"
-      type="button"
-      aria-label="Git diff view"
-      aria-pressed="false"
-      title="Git-style diff view"
-    >
-      <!-- Lucide "file-diff" -->
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-           fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-        <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-        <path d="M8 18v-2"/>
-        <path d="M8 14v-2"/>
-        <path d="M16 18h-4"/>
-        <path d="M16 14h-2"/>
-      </svg>
-    </button>
-  </div>
-  <div class="toolbar-end">
-    <diff-settings></diff-settings>
-    <theme-toggle></theme-toggle>
-
-  </div>
-</header>
-
-<!-- Diff page: Monaco side-by-side diff editor, hidden by default -->
-<section id="diff-page" aria-label="Raw diff view">
-  <div class="diff-page-file-header">
-    <span class="diff-file-old">scores/Chopin/etudeOp10No1.xml</span>
-    <span class="diff-file-new">scores/Chopin/etudeOp10No2.xml</span>
-    <button id="diff-edit-toggle" class="diff-edit-btn" type="button" aria-pressed="false" title="Toggle edit mode">Edit</button>
-  </div>
-  <div id="diff-editor-container"></div>
-  <!-- <div id="single-editor-container"></div> -->
-</section>
-
-<!-- Git diff page: hunked unified/split diff view, hidden by default -->
-<section id="git-diff-page" aria-label="Git diff view">
-  <div class="diff-page-file-header">
-    <span class="diff-file-old">--- scores/Chopin/etudeOp10No1.xml</span>
-    <span class="diff-file-new">+++ scores/Chopin/etudeOp10No2.xml</span>
-    <button id="git-diff-split-toggle" class="diff-edit-btn" type="button" aria-pressed="false" title="Toggle side-by-side view">Split</button>
-  </div>
-  <div class="diff-page-hunks" id="git-diff-hunks"></div>
-</section>
-
-    <div class="ticks"></div>
-<div class="notation-controls shared-controls">
-  <label for="notation-scale">Scale (both)</label>
-  <input id="notation-scale" type="range" min="40" max="140" step="5" value="80" />
-  <output id="notation-scale-value" for="notation-scale">80%</output>
-</div>
-
-<section id="next-steps">
-  <div id="docs">
-    <div class="notation-panel">
-      <div class="notation-controls individual-controls">
-        <label for="scale-1">Scale</label>
-        <input id="scale-1" type="range" min="40" max="140" step="5" value="80" />
-        <output id="scale-1-value" for="scale-1">80%</output>
-        <score-loader id="score-loader-1"></score-loader>
-      </div>
-      <div id="XML-notation" class="notation-stage">Loading score…</div>
-    </div>
-  </div>
-  <div id="social">
-    <div class="notation-panel">
-      <div class="notation-controls individual-controls">
-        <label for="scale-2">Scale</label>
-        <input id="scale-2" type="range" min="40" max="140" step="5" value="80" />
-        <output id="scale-2-value" for="scale-2">80%</output>
-        <score-loader id="score-loader-2"></score-loader>
-      </div>
-      <div id="XML-notation-compare" class="notation-stage">Loading score…</div>
-    </div>
-  </div>
-</section>
-
-<div class="ticks"></div>
-<section id="spacer"></section>
-`;
+app.innerHTML = APP_HTML;
 
 // ─── Element queries ───────────────────────────────────────────────────────
 
-const root = document.documentElement;
-const notationContainer =
-  document.querySelector<HTMLDivElement>("#XML-notation")!;
-const notationContainer2 = document.querySelector<HTMLDivElement>(
-  "#XML-notation-compare",
-)!;
-const notationPanel = document.querySelector<HTMLDivElement>(
-  "#docs .notation-panel",
-)!;
-const notationPanel2 = document.querySelector<HTMLDivElement>(
-  "#social .notation-panel",
-)!;
-
-/** Shared scale: moves both scores simultaneously. */
-const sharedScaleInput =
-  document.querySelector<HTMLInputElement>("#notation-scale")!;
-const sharedScaleOutput = document.querySelector<HTMLOutputElement>(
-  "#notation-scale-value",
-)!;
-
-/** Per-score scale: overrides just one score, other remains unchanged. */
+const notationContainer = document.querySelector<HTMLDivElement>("#XML-notation")!;
+const notationContainer2 = document.querySelector<HTMLDivElement>("#XML-notation-compare")!;
+const notationPanel = document.querySelector<HTMLDivElement>("#docs .notation-panel")!;
+const notationPanel2 = document.querySelector<HTMLDivElement>("#social .notation-panel")!;
+const sharedScaleInput = document.querySelector<HTMLInputElement>("#notation-scale")!;
+const sharedScaleOutput = document.querySelector<HTMLOutputElement>("#notation-scale-value")!;
 const scale1Input = document.querySelector<HTMLInputElement>("#scale-1")!;
-const scale1Output =
-  document.querySelector<HTMLOutputElement>("#scale-1-value")!;
+const scale1Output = document.querySelector<HTMLOutputElement>("#scale-1-value")!;
 const scale2Input = document.querySelector<HTMLInputElement>("#scale-2")!;
-const scale2Output =
-  document.querySelector<HTMLOutputElement>("#scale-2-value")!;
-
-const diffSettingsEl = document.querySelector<HTMLElement>("diff-settings")!;
-const viewToggleBtn =
-  document.querySelector<HTMLButtonElement>("#view-toggle")!;
-const gitDiffToggleBtn =
-  document.querySelector<HTMLButtonElement>("#git-diff-toggle")!;
+const scale2Output = document.querySelector<HTMLOutputElement>("#scale-2-value")!;
+const diffSettingsEl = document.querySelector<DiffSettings>("diff-settings")!;
+const viewToggleBtn = document.querySelector<HTMLButtonElement>("#view-toggle")!;
+const gitDiffToggleBtn = document.querySelector<HTMLButtonElement>("#git-diff-toggle")!;
 const diffPageEl = document.querySelector<HTMLElement>("#diff-page")!;
 const gitDiffPageEl = document.querySelector<HTMLElement>("#git-diff-page")!;
 const gitDiffHunksEl = document.querySelector<HTMLElement>("#git-diff-hunks")!;
-const gitDiffSplitToggleBtn = document.querySelector<HTMLButtonElement>(
-  "#git-diff-split-toggle",
+const gitDiffSplitToggleBtn = document.querySelector<HTMLButtonElement>("#git-diff-split-toggle")!;
+const diffEditorContainer = document.querySelector<HTMLElement>("#diff-editor-container")!;
+const diffEditToggleBtn = document.querySelector<HTMLButtonElement>("#diff-edit-toggle")!;
+const prevChangeBtn = document.querySelector<HTMLButtonElement>("#prev-change")!;
+const nextChangeBtn = document.querySelector<HTMLButtonElement>("#next-change")!;
+const changeCounterEl = document.querySelector<HTMLSpanElement>("#change-counter")!;
+const diffSummaryAside = document.querySelector<HTMLElement>("#diff-summary")!;
+const diffSummaryMobileCloseBtn = document.querySelector<HTMLButtonElement>(
+  "#diff-summary-mobile-close",
 )!;
+const diffSummaryOpenBtn = document.querySelector<HTMLButtonElement>("#toolbar-summary-open");
+const swapScoresBtn = document.querySelector<HTMLButtonElement>("#swap-scores")!;
 
 if (
   !notationContainer ||
@@ -271,24 +123,27 @@ if (
   !diffPageEl ||
   !gitDiffPageEl ||
   !gitDiffHunksEl ||
-  !gitDiffSplitToggleBtn
+  !gitDiffSplitToggleBtn ||
+  !diffEditorContainer ||
+  !diffEditToggleBtn ||
+  !prevChangeBtn ||
+  !nextChangeBtn ||
+  !changeCounterEl ||
+  !diffSummaryAside ||
+  !diffSummaryMobileCloseBtn ||
+  !swapScoresBtn
 ) {
   throw new Error("Required app elements not found in DOM");
 }
 
+wireScrollSync(notationContainer, notationContainer2);
+
 // ─── Pagination components ─────────────────────────────────────────────────
-// Created immediately so they're in the DOM before Verovio initialises; the
-// `toolkit` property is set later once the WASM is ready.
 
-/** Pagination for score 1 (old / left). */
 const paginationEl: Pages = document.createElement("page-pagination");
-/** Pagination for score 2 (new / right). */
 const paginationEl2: Pages = document.createElement("page-pagination");
-
 paginationEl.notationContainer = notationContainer;
 paginationEl2.notationContainer = notationContainer2;
-
-// Prepend so pagination sits above the notation stage inside each panel
 notationPanel.prepend(paginationEl);
 notationPanel2.prepend(paginationEl2);
 
@@ -296,804 +151,523 @@ notationPanel2.prepend(paginationEl2);
 
 const scoreLoaderEl = document.querySelector<ScoreLoader>("#score-loader-1")!;
 const scoreLoaderEl2 = document.querySelector<ScoreLoader>("#score-loader-2")!;
-
-// Both panels share the same sample list — single source of truth.
 scoreLoaderEl.samples = SAMPLE_SCORES;
 scoreLoaderEl2.samples = SAMPLE_SCORES;
 
-scoreLoaderEl.addEventListener("score-load", (e) => {
-  const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
-  reloadScore(1, xml, filename);
-});
+// ─── Mutable rendering state — SINGLE SOURCE OF TRUTH ─────────────────────
 
-scoreLoaderEl2.addEventListener("score-load", (e) => {
-  const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
-  reloadScore(2, xml, filename);
-});
-
-// ─── Mutable rendering state ───────────────────────────────────────────────
-
-// type Theme = "light" | "dark";
-
-let originalXML: string | null = null;
-let xMLToCompare: string | null = null;
-let toolkit: Toolkit | null = null;
-let toolkit2: Toolkit | null = null;
-
-/** Cached diff result, recomputed when settings change. */
-let xmlDiff: XMLDiffResult | null = null;
-
-/** Single source of truth for all user-configurable diff settings. */
 let currentSettings: DiffSettingsValue = { ...DEFAULT_SETTINGS };
 
-/**
- * SVG id → MusicXML measure number maps, built once after each `loadData`.
- * Used by {@link applyDiffHighlights} to identify which measure each
- * `g.measure` SVG element corresponds to on any page.
- */
-let measureIdMap1 = new Map<string, number>();
-let measureIdMap2 = new Map<string, number>();
-let childIdMap1 = new Map<string, ChildDiffKey>();
-let childIdMap2 = new Map<string, ChildDiffKey>();
-// ─── Theme ─────────────────────────────────────────────────────────────────
-const themeStorageKey = "theme-preference";
-const themeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-//
-// const applyTheme = (theme: Theme, persist = false) => {
-//   root.dataset.theme = theme;
-//   // Keep Monaco in sync — setTheme is global across all editor instances
-//   monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs-light");
-//   if (persist) window.localStorage.setItem(themeStorageKey, theme);
-// };
-//
-// const savedTheme = window.localStorage.getItem(themeStorageKey);
-// if (savedTheme === "light" || savedTheme === "dark") {
-//   applyTheme(savedTheme);
-// }
-//
-themeMediaQuery.addEventListener("change", (_) => {
-  if (window.localStorage.getItem(themeStorageKey)) return;
-});
+const state: NotationState = {
+  originalXML: null,
+  xMLToCompare: null,
+  toolkit: null as Toolkit | null,
+  toolkit2: null as Toolkit | null,
+  xmlDiff: null as XMLDiffResult | null,
+  measureIdMap1: new Map<string, number>(),
+  measureIdMap2: new Map<string, number>(),
+  childIdMap1: new Map<string, ChildDiffKey>(),
+  childIdMap2: new Map<string, ChildDiffKey>(),
+};
 
-// ─── Scale helpers ─────────────────────────────────────────────────────────
+const containers: [HTMLDivElement, HTMLDivElement] = [notationContainer, notationContainer2];
 
-/**
- * Update a scale `<output>` element's displayed value.
- *
- * @param output The `<output>` element to update.
- * @param scale  Scale percentage (e.g. 80 for 80%).
- */
-function updateScaleOutput(output: HTMLOutputElement, scale: number): void {
-  output.value = `${scale}%`;
-  output.textContent = `${scale}%`;
+// ─── Hover-link wiring ─────────────────────────────────────────────────────
+// Overlay → Monaco and Monaco → overlay listeners are rebuilt after every
+// applyDiffHighlights run because overlays are replaced from scratch each time.
+// The dispose function from the previous run cleans up stale listeners before
+// the new overlay set is wired.
+
+let disposeOverlayToMonaco: (() => void) | null = null;
+
+function rewireHoverLink(): void {
+  disposeOverlayToMonaco?.();
+  disposeOverlayToMonaco = null;
+
+  const highlighter = getHoverHighlighter();
+  if (!highlighter) return;
+
+  const records = getOverlayRecords();
+  disposeOverlayToMonaco = wireOverlayToMonaco(records, highlighter);
+  refreshHoverLink(getOverlayRecords);
 }
 
-/**
- * Re-render one score at a new scale.
- *
- * Calls `toolkit.setOptions({ scale })` (preserving all other options) then
- * `toolkit.redoLayout()` to recalculate page breaks for the new size, and
- * finally `toolkit.renderToSVG(page)` to produce the updated SVG. The
- * pagination total is also refreshed because scale changes can alter how many
- * pages the score occupies.
- *
- * @param tk         The Verovio toolkit instance owning the score.
- * @param pagination The pagination component bound to this score.
- * @param container  The `.notation-stage` `<div>` that receives the SVG.
- * @param scale      New scale percentage (Verovio range: 1–1000).
- */
-function rescale(
-  tk: Toolkit,
-  pagination: Pages,
-  container: HTMLDivElement,
-  scale: number,
-): void {
-  tk.setOptions({ scale });
-  tk.redoLayout();
-  pagination.total = getTotalPageCount(tk);
-  container.innerHTML = tk.renderToSVG(pagination.page);
-  setNotationSVGIDToIndexBase(container);
-}
+// ─── Monaco callbacks ──────────────────────────────────────────────────────
 
-// ─── Diff helpers ───────────────────────────────────────────────────────────
-
-/**
- * Re-apply the current diff highlights to both containers.
- *
- * Called after every render that changes the SVG content (scale, page turn)
- * so that overlays are repositioned over the freshly rendered elements.
- */
-function reapplyDiff(): void {
-  if (!xmlDiff) return;
-  applyDiffHighlights(
-    notationContainer,
-    notationContainer2,
-    xmlDiff,
-    measureIdMap1,
-    measureIdMap2,
-    childIdMap1,
-    childIdMap2,
-    currentSettings.showLineNumbers,
-  );
-}
-
-/**
- * Swap out one score and refresh everything downstream.
- *
- * Updates the XML state variable, re-renders the Verovio notation, rebuilds
- * the measure/child ID maps for accurate highlighting, then re-runs the full
- * diff. If Monaco already has models open they are updated in-place so the
- * user doesn't lose editor position on the other pane.
- *
- * @param which    Which score slot to replace (1 = original/left, 2 = compare/right).
- * @param xml      Raw MusicXML string for the new score.
- * @param filename Display name shown in the Monaco file header.
- */
-function reloadScore(which: 1 | 2, xml: string, filename: string): void {
-  const scale = Number(sharedScaleInput.value);
-
-  if (which === 1) {
-    originalXML = xml;
-    renderNotation(xml, paginationEl, toolkit, notationContainer, scale);
-    measureIdMap1 = buildMeasureIdMap(toolkit!);
-    childIdMap1 = buildChildIdMap(toolkit!);
-    monacoDiffEditor?.getModel()?.original.setValue(xml);
-    document.querySelectorAll<HTMLElement>(".diff-file-old").forEach((el) => {
-      el.textContent = filename;
-    });
-  } else {
-    xMLToCompare = xml;
-    renderNotation(xml, paginationEl2, toolkit2, notationContainer2, scale);
-    measureIdMap2 = buildMeasureIdMap(toolkit2!);
-    childIdMap2 = buildChildIdMap(toolkit2!);
-    monacoDiffEditor?.getModel()?.modified.setValue(xml);
-    document.querySelectorAll<HTMLElement>(".diff-file-new").forEach((el) => {
-      el.textContent = filename;
-    });
-  }
-
-  runDiff();
-}
-
-/**
- * (Re-)compute the diff with the given options and apply highlights.
- *
- * Stores the result in `xmlDiff` so it can be re-applied cheaply on
- * subsequent re-renders without a full re-diff.
- *
- * @param opts Diff options; defaults to the last options set by the user.
- */
-function runDiff(opts: XMLDiffOptions = currentSettings): void {
-  if (!originalXML || !xMLToCompare) return;
-  xmlDiff = diffXML(originalXML, xMLToCompare, opts);
-  console.log(xmlDiff, "xmlDiff");
-  reapplyDiff();
-  // Monaco renders its own diff from its models — it does not read xmlDiff.
-  // Only the git diff page needs an explicit refresh here.
-  if (activeView === "gitdiff") renderGitDiffPage();
-}
-
-// ─── Monaco diff editor ────────────────────────────────────────────────────
-
-/** Singleton Monaco diff editor, created lazily on first view toggle. */
-let monacoDiffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
-// let monacoSingleEditor: monaco.editor.IStandaloneCodeEditor | null = null;
-
-/** Whether the modified (right) pane is currently editable. */
-let diffEditorEditable = false;
-
-/** Disposable for the modified-editor content listener (re-created with each new model). */
-// let monacoContentDisposable: monaco.IDisposable | null = null;
-
-/** Container div that Monaco mounts into (child of `#diff-page`). */
-const diffEditorContainer = document.querySelector<HTMLElement>(
-  "#diff-editor-container",
-)!;
-// const singleEditorContainer = document.querySelector<HTMLElement>(
-//   "#single-editor-container",
-// )!;
-
-/** Edit-mode toggle button in the diff page header. */
-const diffEditToggleBtn =
-  document.querySelector<HTMLButtonElement>("#diff-edit-toggle")!;
-
-diffEditToggleBtn.addEventListener("click", () => {
-  diffEditorEditable = !diffEditorEditable;
-  monacoDiffEditor
-    ?.getModifiedEditor()
-    .updateOptions({ readOnly: !diffEditorEditable });
-  diffEditToggleBtn.setAttribute("aria-pressed", String(diffEditorEditable));
-  diffEditToggleBtn.textContent = diffEditorEditable ? "Read-only" : "Edit";
-});
-
-/**
- * Minimal generic debounce — waits `ms` milliseconds of silence before
- * calling `fn`. Resets the timer on every new call.
- */
-function debounce<T extends unknown[]>(
-  fn: (...args: T) => void,
-  ms: number,
-): (...args: T) => void {
-  let timer: ReturnType<typeof setTimeout>;
-  return (...args: T) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
-  };
-}
-
-/**
- * Propagate Monaco edits back to the rest of the app.
- *
- * Called (debounced) whenever the user types in the modified pane:
- * 1. Reads the current XML out of Monaco and updates `meiXML2`.
- * 2. Re-runs the LCS diff so SVG overlays and the git diff page reflect the change.
- * 3. Re-renders the Verovio score 2 in the background so the notation view is
- *    ready with updated highlights when the user switches back. Invalid XML
- *    during mid-edit is silently ignored.
- */
-const syncFromMonaco = debounce(() => {
-  if (!monacoDiffEditor || !originalXML) return;
-  // console.log(XMLToCompare, "xmlto");
-  // const test = monacoDiffEditor.getLineChanges();
-  // console.log("test", test);
-
-  xMLToCompare = monacoDiffEditor.getModifiedEditor().getValue();
-
-  // Recompute LCS diff + SVG overlays (runDiff no longer touches Monaco)
-  runDiff();
-
-  // Re-render Verovio score 2 in the background (notation may be hidden)
-  if (toolkit2) {
-    try {
-      const scale = Number(scale2Input.value);
-      renderNotation(
-        xMLToCompare,
-        paginationEl2,
-        toolkit2,
-        notationContainer2,
-        scale,
-      );
-      measureIdMap2 = buildMeasureIdMap(toolkit2);
-      childIdMap2 = buildChildIdMap(toolkit2);
-      reapplyDiff(); // re-overlay with fresh measure map
-    } catch {
-      // XML is temporarily invalid while editing — skip silently
-    }
-  }
-}, 600);
-
-/**
- * Return the Monaco theme string that matches the current app theme.
- * NOTE: Only on first render, subsequent theme changes are handled in the theme-toggle btn element
- */
-function getMonacoTheme(): string {
-  return (root.dataset.theme ?? "light") === "dark" ? "vs-dark" : "vs-light";
-}
-
-/**
- * Mount or update the Monaco side-by-side diff editor.
- *
- * **First call** — creates the editor, sets the initial models (original XML
- * on the left, score 2 on the right), and wires up the content-change
- * listener so edits propagate back via {@link syncFromMonaco}.
- *
- * **Subsequent calls** — only updates visual options (line numbers, theme).
- * Models are intentionally left untouched so user edits are not lost when
- * diff settings change.
- */
-function renderCodeDiffPage(): void {
-  if (!originalXML || !xMLToCompare) return;
-
-  if (!monacoDiffEditor) {
-    // monacoSingleEditor = monaco.editor.create(singleEditorContainer, {
-    //   value:
-    //     "yooooosdsajlksd lkslkj lsjdlk sdj lksj dslkd jdslkd jslkd jlksdj k",
-    //   language: "markdown",
-    //   automaticLayout: true,
-    // });
-    monacoDiffEditor = monaco.editor.createDiffEditor(diffEditorContainer, {
-      renderSideBySide: true,
-      originalEditable: false, // left pane always read-only
-      readOnly: true, // right pane starts read-only
-      automaticLayout: true,
-      scrollBeyondLastLine: false,
-      lineNumbers: currentSettings.showLineNumbers ? "on" : "off",
-      minimap: { enabled: currentSettings.showMiniMap },
-      wordWrap: "on",
-      theme: getMonacoTheme(),
-      fontSize: 13,
-      useShadowDOM: true,
-      smoothScrolling: true,
-      showDeprecated: true,
-    });
-
-    // Set models only on first mount
-    monacoDiffEditor.setModel({
-      original: monaco.editor.createModel(originalXML, "xml"),
-      modified: monaco.editor.createModel(xMLToCompare, "xml"),
-    });
-
-    // lineNumbers must also be applied to each pane directly on first mount
-    const initialPaneOpts = {
-      lineNumbers: currentSettings.showLineNumbers
-        ? ("on" as const)
-        : ("off" as const),
-      minimap: { enabled: currentSettings.showMiniMap },
-    };
-    monacoDiffEditor.getOriginalEditor().updateOptions(initialPaneOpts);
-    monacoDiffEditor.getModifiedEditor().updateOptions(initialPaneOpts);
-
-    monacoDiffEditor.getModel()?.modified.onDidChangeContent(syncFromMonaco);
-    // // Wire up the live-sync listener
-    // monacoContentDisposable?.dispose();
-    // monacoContentDisposable = monacoDiffEditor
-    //   .getModifiedEditor()
-    //   .onDidChangeModelContent(syncFromMonaco);
-  } else {
-    // Preserve user edits — only update appearance options.
-    // lineNumbers must be set on each pane individually; the diff editor's
-    // updateOptions does not propagate it to the child editors.
-    const paneOpts = {
-      lineNumbers: currentSettings.showLineNumbers
-        ? ("on" as const)
-        : ("off" as const),
-      minimap: { enabled: currentSettings.showMiniMap },
-    };
-    monacoDiffEditor.getOriginalEditor().updateOptions(paneOpts);
-    monacoDiffEditor.getModifiedEditor().updateOptions(paneOpts);
-    monaco.editor.setTheme(getMonacoTheme());
+function rerenderScore2Background(xml: string): void {
+  state.xMLToCompare = xml;
+  if (!state.toolkit2) return;
+  try {
+    const scale = Number(scale2Input.value);
+    renderNotation(xml, paginationEl2, state.toolkit2, notationContainer2, scale);
+    state.measureIdMap2 = buildMeasureIdMap(state.toolkit2);
+    state.childIdMap2 = buildChildIdMap(state.toolkit2);
+    reapplyDiff(state, containers, currentSettings.showLineNumbers);
+    enrichOverlays(containers);
+  } catch {
+    // XML is temporarily invalid while editing — skip silently
   }
 }
 
-// ─── Git diff page (hunked HTML view) ──────────────────────────────────────
+const monacoCallbacks = {
+  runDiff: () => {
+    runDiff(state, containers, currentSettings);
+    refreshChangeNav();
+  },
+  rerenderScore2: rerenderScore2Background,
+};
 
-/** Escape `<`, `>`, `&` for safe HTML text injection. */
-function escapeHTML(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// ─── Loading indicator ────────────────────────────────────────────────────
+// Shown only while the Monaco chunk is fetching on first open. Removed once
+// the editor mounts. Plain text — no spinner — respects prefers-reduced-motion.
+
+function showMonacoLoadingIndicator(): HTMLParagraphElement {
+  const p = document.createElement("p");
+  p.id = "monaco-loading";
+  p.textContent = "Loading editor…";
+  p.style.cssText = "padding:2rem;text-align:center;color:var(--color-muted,#888);";
+  diffEditorContainer.appendChild(p);
+  return p;
 }
 
-gitDiffSplitToggleBtn.addEventListener("click", () => {
-  const next =
-    currentSettings.gitDiffOrientation === "split" ? "unified" : "split";
-  currentSettings = { ...currentSettings, gitDiffOrientation: next };
-  // Push the change back into the settings panel so the gear UI stays in sync
-  (diffSettingsEl as unknown as { value: DiffSettingsValue }).value =
-    currentSettings;
-  gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(next === "split"));
-  gitDiffSplitToggleBtn.textContent = next === "split" ? "Unified" : "Split";
-  renderGitDiffPage();
-});
-
-/**
- * Build a cell for one side of a split-view row.
- *
- * @param line  The diff line to render, or `undefined` for an empty cell
- *              (shown when one side has no paired counterpart).
- */
-function splitCellHTML(
-  line: DiffLine | undefined,
-  side: "old" | "new",
-): string {
-  const lineNo = currentSettings.showLineNumbers
-    ? `<span class="diff-page-gutter diff-line-no">${side === "old" ? (line?.oldLineNo ?? "?") : (line?.newLineNo ?? "?")}</span>`
-    : "";
-  if (!line) {
-    return `<div class="diff-split-cell diff-line-empty">${lineNo}</div>`;
-  }
-  const glyph = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
-  return (
-    `<div class="diff-split-cell diff-line-${line.type}">` +
-    lineNo +
-    `<span class="diff-page-gutter">${glyph}</span>` +
-    `<span class="diff-page-code">${escapeHTML(line.content)}</span>` +
-    `</div>`
-  );
-}
-
-/**
- * Render one element diff hunk as a unified (single-column) block.
- */
-function unifiedHunkHTML(diff: ElementDiff): string {
-  const linesHTML = diff.lines
-    .map((l) => {
-      const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
-      const lineNosHTML = currentSettings.showLineNumbers
-        ? `<span class="diff-page-gutter diff-line-no">${l.oldLineNo ?? ""}</span>` +
-          `<span class="diff-page-gutter diff-line-no">${l.newLineNo ?? ""}</span>`
-        : "";
-      return (
-        `<div class="diff-page-line diff-line-${l.type}">` +
-        lineNosHTML +
-        `<span class="diff-page-gutter">${glyph}</span>` +
-        `<span class="diff-page-code">${escapeHTML(l.content)}</span>` +
-        `</div>`
-      );
-    })
-    .join("");
-  return `<div class="diff-hunk-header">@@ ${diff.label} @@</div>${linesHTML}`;
-}
-
-/**
- * Render one element diff hunk as a side-by-side (split) block.
- *
- * Consecutive remove/add runs are paired so a deletion and its corresponding
- * insertion appear on the same row. Unpaired removes get an empty right cell;
- * unpaired adds get an empty left cell.
- */
-function splitHunkHTML(diff: ElementDiff): string {
-  type SplitRow =
-    | { kind: "context"; line: DiffLine }
-    | { kind: "change"; remove?: DiffLine; add?: DiffLine };
-
-  // Group consecutive removes and adds into paired change rows
-  const rows: SplitRow[] = [];
-  let i = 0;
-  while (i < diff.lines.length) {
-    const l = diff.lines[i];
-    if (l.type === "context") {
-      rows.push({ kind: "context", line: l });
-      i++;
-    } else {
-      const removes: DiffLine[] = [];
-      const adds: DiffLine[] = [];
-      while (i < diff.lines.length && diff.lines[i].type === "remove")
-        removes.push(diff.lines[i++]);
-      while (i < diff.lines.length && diff.lines[i].type === "add")
-        adds.push(diff.lines[i++]);
-      const len = Math.max(removes.length, adds.length);
-      for (let j = 0; j < len; j++) {
-        rows.push({ kind: "change", remove: removes[j], add: adds[j] });
-      }
-    }
-  }
-
-  const rowsHTML = rows
-    .map((row) => {
-      if (row.kind === "context") {
-        // Context lines: same content duplicated in both cells
-        const code = escapeHTML(row.line.content);
-        const lineNoOld = currentSettings.showLineNumbers
-          ? `<span class="diff-page-gutter diff-line-no">${row.line.oldLineNo ?? ""}</span>`
-          : "";
-        const lineNoNew = currentSettings.showLineNumbers
-          ? `<span class="diff-page-gutter diff-line-no">${row.line.newLineNo ?? ""}</span>`
-          : "";
-        return (
-          `<div class="diff-split-row">` +
-          `<div class="diff-split-cell diff-line-context">${lineNoOld}<span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
-          `<div class="diff-split-cell diff-line-context">${lineNoNew}<span class="diff-page-gutter"> </span><span class="diff-page-code">${code}</span></div>` +
-          `</div>`
-        );
-      }
-      return (
-        `<div class="diff-split-row">` +
-        splitCellHTML(row.remove, "old") +
-        splitCellHTML(row.add, "new") +
-        `</div>`
-      );
-    })
-    .join("");
-
-  return `<div class="diff-hunk-header">@@ ${diff.label} @@</div>${rowsHTML}`;
-}
-
-/**
- * Render the git diff page in either unified or split mode depending on
- * `currentSettings.gitDiffOrientation`. Credits first, measures in ascending order.
- */
-function renderGitDiffPage(): void {
-  const hasChanges =
-    xmlDiff &&
-    (xmlDiff.measures.size > 0 ||
-      xmlDiff.credits.size > 0 ||
-      xmlDiff.children.size > 0);
-
-  if (!xmlDiff || !hasChanges) {
-    gitDiffHunksEl.innerHTML = `<p class="diff-page-empty">No differences found between the two scores.</p>`;
-    return;
-  }
-
-  const isSplit = currentSettings.gitDiffOrientation === "split";
-  const hunkFn = isSplit ? splitHunkHTML : unifiedHunkHTML;
-
-  const creditHunks = [...xmlDiff.credits.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, d]) => hunkFn(d))
-    .join("");
-
-  const measureHunks = [...xmlDiff.measures.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, d]) => hunkFn(d))
-    .join("");
-
-  // In detailed mode, children replace measure hunks
-  const childHunks = [...xmlDiff.children.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, d]) => hunkFn(d))
-    .join("");
-  console.log(creditHunks, measureHunks, childHunks, "dwd");
-
-  gitDiffHunksEl.innerHTML = creditHunks + measureHunks + childHunks;
-
-  // Toggle the CSS class on the container so styles can target each mode
-  gitDiffHunksEl.classList.toggle("is-split", isSplit);
+function removeMonacoLoadingIndicator(el: HTMLParagraphElement): void {
+  el.remove();
 }
 
 // ─── View toggle ───────────────────────────────────────────────────────────
 
-/** The two main sections that are mutually exclusive. */
 const notationSections = [
   document.querySelector<HTMLElement>(".shared-controls")!,
   document.querySelector<HTMLElement>("#next-steps")!,
 ];
 
-/** Which view is currently shown. */
 type View = "notation" | "monaco" | "gitdiff";
 let activeView: View = "notation";
 
-/**
- * Switch to `target` view, or back to `"notation"` if `target` is already
- * active (acts as a toggle so clicking the active button de-selects it).
- */
-function switchView(target: View): void {
+async function switchView(target: View): Promise<void> {
   activeView = activeView === target ? "notation" : target;
-
   const isMonaco = activeView === "monaco";
   const isGitDiff = activeView === "gitdiff";
   const isNotation = activeView === "notation";
 
-  // Update toolbar button pressed states
   viewToggleBtn.setAttribute("aria-pressed", String(isMonaco));
   gitDiffToggleBtn.setAttribute("aria-pressed", String(isGitDiff));
-
-  // Show/hide the notation panels
   notationSections.forEach((el) => {
     if (el) el.style.display = isNotation ? "" : "none";
   });
 
-  // Monaco diff page
   if (isMonaco) {
     diffPageEl.classList.add("visible");
-    renderCodeDiffPage();
-    // One rAF so Monaco can measure the now-visible container
-    requestAnimationFrame(() => monacoDiffEditor?.layout());
+    const loadingEl = showMonacoLoadingIndicator();
+    const monaco = await loadMonaco();
+    removeMonacoLoadingIndicator(loadingEl);
+    renderCodeDiffPage(
+      monaco,
+      state.originalXML,
+      state.xMLToCompare,
+      diffEditorContainer,
+      currentSettings,
+      monacoCallbacks,
+      getOverlayRecords,
+    );
+    requestAnimationFrame(() => getMonacoDiffEditor()?.layout());
   } else {
     diffPageEl.classList.remove("visible");
   }
 
-  // Git diff page
   if (isGitDiff) {
     gitDiffPageEl.classList.add("visible");
-    renderGitDiffPage();
+    renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
   } else {
     gitDiffPageEl.classList.remove("visible");
   }
 }
 
-viewToggleBtn.addEventListener("click", () => switchView("monaco"));
+viewToggleBtn.addEventListener("click", () => void switchView("monaco"));
 gitDiffToggleBtn.addEventListener("click", () => switchView("gitdiff"));
 
-// ─── Diff overlay → Monaco navigation ────────────────────────────────────
+// ─── Monaco navigation from diff overlays ─────────────────────────────────
 
-/**
- * Convert an ElementDiff label into a search string for Monaco's model.
- *
- * Measures are identified by their `number` attribute; credits fall back
- * to a generic `<credit>` tag search (Nth occurrence isn't worth the
- * complexity since credits rarely number more than a handful).
- */
 function labelToSearchTerm(label: string): string {
   const m = label.match(/^measure (\d+)$/);
   return m ? `number="${m[1]}"` : "<credit>";
 }
 
-/**
- * Switch to the Monaco view and reveal the first changed line for `diff`.
- *
- * - `remove`-only diffs are shown on the original (left) editor.
- * - `add` / `change` diffs are shown on the modified (right) editor.
- */
 function navigateMonacoToDiff(diff: ElementDiff): void {
-  if (!monacoDiffEditor) return;
-  const isRemove = diff.changeType === "remove";
-  const editor = isRemove
-    ? monacoDiffEditor.getOriginalEditor()
-    : monacoDiffEditor.getModifiedEditor();
-  const model = editor.getModel();
+  const editor = getMonacoDiffEditor();
+  if (!editor) return;
+  const pane =
+    diff.changeType === "remove" ? editor.getOriginalEditor() : editor.getModifiedEditor();
+  const model = pane.getModel();
   if (!model) return;
-  const matches = model.findMatches(
-    labelToSearchTerm(diff.label),
-    /* searchOnlyEditableRange */ true,
-    /* isRegex */ false,
-    /* matchCase */ false,
-    /* wordSeparators */ null,
-    /* captureMatches */ false,
-  );
+  const matches = model.findMatches(labelToSearchTerm(diff.label), true, false, false, null, false);
   if (matches.length === 0) return;
   const line = matches[0].range.startLineNumber;
-  editor.revealLineInCenter(line);
-  editor.setPosition({ lineNumber: line, column: 1 });
-  editor.focus();
+  pane.revealLineInCenter(line);
+  pane.setPosition({ lineNumber: line, column: 1 });
+  pane.focus();
 }
 
 [notationContainer, notationContainer2].forEach((container) => {
   container.addEventListener("diff-navigate", (e) => {
     const diff = (e as CustomEvent<ElementDiff>).detail;
-    switchView("monaco");
-    // Wait one frame so Monaco has been laid out before we reveal the line
+    void switchView("monaco");
     requestAnimationFrame(() => navigateMonacoToDiff(diff));
   });
 });
 
-// ─── Scale event listeners ─────────────────────────────────────────────────
+// ─── Score loader helpers (shared callback factories) ─────────────────────
+
+function makeModelUpdateCb(): (side: 1 | 2, xml: string) => void {
+  return (side, value) => {
+    const monacoEditor = getMonacoDiffEditor();
+    if (side === 1) monacoEditor?.getModel()?.original.setValue(value);
+    else monacoEditor?.getModel()?.modified.setValue(value);
+  };
+}
+
+function makeFilenameCb(): (side: 1 | 2, name: string) => void {
+  return (side, name) => {
+    const cls = side === 1 ? ".diff-file-old" : ".diff-file-new";
+    document.querySelectorAll<HTMLElement>(cls).forEach((el) => {
+      el.textContent = name;
+    });
+  };
+}
+
+function wireScoreLoader(el: ScoreLoader, which: 1 | 2): void {
+  el.addEventListener("score-load", (e) => {
+    const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
+    reloadScore(
+      which,
+      xml,
+      filename,
+      state,
+      containers,
+      [paginationEl, paginationEl2],
+      sharedScaleInput,
+      currentSettings,
+      makeModelUpdateCb(),
+      makeFilenameCb(),
+    );
+    refreshChangeNav();
+    if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
+  });
+}
+
+wireScoreLoader(scoreLoaderEl, 1);
+wireScoreLoader(scoreLoaderEl2, 2);
+
+// ─── File drop zones ──────────────────────────────────────────────────────
+
+function wireDropZone(stage: HTMLElement, which: 1 | 2, slotLabel: string): void {
+  wireFileDrop(stage, slotLabel);
+  stage.addEventListener("score-file-drop", (e) => {
+    const { file } = (e as CustomEvent<ScoreFileDropDetail>).detail;
+    loadScoreFile(file)
+      .then(({ xml, filename }) => {
+        reloadScore(
+          which,
+          xml,
+          filename,
+          state,
+          containers,
+          [paginationEl, paginationEl2],
+          sharedScaleInput,
+          currentSettings,
+          makeModelUpdateCb(),
+          makeFilenameCb(),
+        );
+        refreshChangeNav();
+        if (activeView === "gitdiff") {
+          renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
+        }
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : "Failed to load file";
+        // Surface via the stage's title so the failure is at least diagnosable.
+        stage.title = message;
+      });
+  });
+}
+
+wireDropZone(notationContainer, 1, "score 1");
+wireDropZone(notationContainer2, 2, "score 2");
+
+// ─── Change navigation (next / prev) ──────────────────────────────────────
+
+let currentChanges: ChangeEntry[] = [];
+let currentChangeIdx = -1;
+
+const diffSummary = wireDiffSummary(diffSummaryAside, (id) => {
+  const idx = currentChanges.findIndex((c) => c.id === id);
+  if (idx !== -1) focusChange(idx);
+});
+
+// ─── Mobile sidebar overlay ────────────────────────────────────────────────
+
+function openSidebarOverlay(): void {
+  diffSummaryAside.dataset.mobileOpen = "true";
+  diffSummaryAside.setAttribute("aria-hidden", "false");
+  diffSummaryMobileCloseBtn.focus();
+}
+
+function closeSidebarOverlay(): void {
+  delete diffSummaryAside.dataset.mobileOpen;
+  diffSummaryAside.setAttribute("aria-hidden", "true");
+}
+
+diffSummaryMobileCloseBtn.addEventListener("click", closeSidebarOverlay);
+
+diffSummaryAside.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (e.key === "Escape") closeSidebarOverlay();
+});
+
+diffSummaryOpenBtn?.addEventListener("click", openSidebarOverlay);
 
 /**
- * Shared scale slider — moves both scores to the same scale simultaneously.
- * Also synchronises the two individual scale inputs so they visually reflect
- * the current shared value.
+ * Add ARIA attributes and keyboard handling to every `.diff-overlay` element
+ * inside the given containers. Called after each diff render because overlays
+ * are recreated on every re-apply. Each overlay already fires a `diff-navigate`
+ * event on click; here we make that reachable from the keyboard too.
  */
+function enrichOverlays(containers: readonly HTMLElement[]): void {
+  for (const container of containers) {
+    for (const overlay of container.querySelectorAll<HTMLDivElement>(".diff-overlay")) {
+      if (overlay.dataset.ariaEnriched) continue;
+      overlay.dataset.ariaEnriched = "true";
+      overlay.setAttribute("role", "button");
+      overlay.setAttribute("tabindex", "0");
+      const label = overlay.dataset.diffLabel ?? "diff";
+      const type = overlay.classList.contains("diff-overlay--add")
+        ? "added"
+        : overlay.classList.contains("diff-overlay--remove")
+          ? "removed"
+          : "changed";
+      overlay.setAttribute("aria-label", `View diff: ${label} (${type})`);
+      overlay.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          overlay.click();
+        }
+      });
+    }
+  }
+  // Rebuild hover-link listeners after the overlay set is finalised.
+  // This is idempotent when Monaco hasn't been opened yet (rewireHoverLink
+  // guards on getHoverHighlighter returning non-null).
+  rewireHoverLink();
+}
+
+function refreshChangeNav(): void {
+  currentChanges = flattenChanges(state.xmlDiff);
+  currentChangeIdx = currentChanges.length > 0 ? 0 : -1;
+  updateChangeCounter();
+  prevChangeBtn.disabled = currentChanges.length === 0;
+  nextChangeBtn.disabled = currentChanges.length === 0;
+  swapScoresBtn.disabled = !state.originalXML || !state.xMLToCompare;
+  diffSummary.refresh(currentChanges);
+  enrichOverlays(containers);
+}
+
+function updateChangeCounter(): void {
+  if (currentChanges.length === 0) {
+    changeCounterEl.textContent = "0 of 0";
+    return;
+  }
+  changeCounterEl.textContent = `${currentChangeIdx + 1} of ${currentChanges.length}`;
+}
+
+/**
+ * Scroll both notation stages so the overlay for the active change is in
+ * view, then briefly pulse the overlay so the user can spot it. Falls back
+ * silently when the change has no rendered overlay (e.g. a credit on a page
+ * that isn't currently shown).
+ */
+function focusChange(idx: number): void {
+  if (idx < 0 || idx >= currentChanges.length) return;
+  currentChangeIdx = idx;
+  updateChangeCounter();
+  const change = currentChanges[idx];
+
+  for (const container of containers) {
+    container.querySelectorAll(".diff-overlay--focus").forEach((el) => {
+      el.classList.remove("diff-overlay--focus");
+    });
+    const overlays = container.querySelectorAll<HTMLDivElement>(".diff-overlay");
+    for (const overlay of overlays) {
+      if (overlay.dataset.diffLabel === change.diff.label) {
+        overlay.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        overlay.classList.add("diff-overlay--focus");
+        setTimeout(() => overlay.classList.remove("diff-overlay--focus"), 1700);
+        break;
+      }
+    }
+  }
+}
+
+prevChangeBtn.addEventListener("click", () => {
+  if (currentChanges.length === 0) return;
+  focusChange((currentChangeIdx - 1 + currentChanges.length) % currentChanges.length);
+});
+nextChangeBtn.addEventListener("click", () => {
+  if (currentChanges.length === 0) return;
+  focusChange((currentChangeIdx + 1) % currentChanges.length);
+});
+
+document.addEventListener("keydown", (e) => {
+  const target = e.target as HTMLElement | null;
+  if (
+    target &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable ||
+      target.closest(".monaco-editor"))
+  ) {
+    return;
+  }
+  if (currentChanges.length === 0) return;
+  if (e.key === "j" || e.key === "ArrowDown") {
+    e.preventDefault();
+    focusChange((currentChangeIdx + 1) % currentChanges.length);
+  } else if (e.key === "k" || e.key === "ArrowUp") {
+    e.preventDefault();
+    focusChange((currentChangeIdx - 1 + currentChanges.length) % currentChanges.length);
+  }
+});
+
+// ─── Button wiring ─────────────────────────────────────────────────────────
+
+swapScoresBtn.addEventListener("click", () => {
+  const filename1 =
+    document.querySelector<HTMLElement>(".diff-file-old")?.textContent?.trim() ?? "";
+  const filename2 =
+    document.querySelector<HTMLElement>(".diff-file-new")?.textContent?.trim() ?? "";
+
+  swapScores(
+    state,
+    containers,
+    [paginationEl, paginationEl2],
+    sharedScaleInput,
+    currentSettings,
+    makeModelUpdateCb(),
+    makeFilenameCb(),
+    filename1,
+    filename2,
+  );
+  refreshChangeNav();
+  if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
+});
+
+wireEditToggle(diffEditToggleBtn);
+
+wireGitDiffSplitToggle(
+  gitDiffSplitToggleBtn,
+  diffSettingsEl,
+  () => currentSettings,
+  (s) => {
+    currentSettings = s;
+  },
+  () => renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings),
+);
+
+// ─── Scale event listeners ─────────────────────────────────────────────────
+
 sharedScaleInput.addEventListener("input", () => {
   const scale = Number(sharedScaleInput.value);
   updateScaleOutput(sharedScaleOutput, scale);
-
-  // Keep individual sliders in sync with the shared value
   scale1Input.value = String(scale);
   scale2Input.value = String(scale);
   updateScaleOutput(scale1Output, scale);
   updateScaleOutput(scale2Output, scale);
-
-  if (!toolkit || !toolkit2) return;
-  rescale(toolkit, paginationEl, notationContainer, scale);
-  rescale(toolkit2, paginationEl2, notationContainer2, scale);
-  reapplyDiff();
+  if (!state.toolkit || !state.toolkit2) return;
+  rescale(state.toolkit, paginationEl, notationContainer, scale);
+  rescale(state.toolkit2, paginationEl2, notationContainer2, scale);
+  reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
-/**
- * Individual scale for score 1 — rescales the left score only.
- * The shared slider and score 2 are unaffected.
- */
 scale1Input.addEventListener("input", () => {
   const scale = Number(scale1Input.value);
   updateScaleOutput(scale1Output, scale);
-  if (!toolkit) return;
-  rescale(toolkit, paginationEl, notationContainer, scale);
-  reapplyDiff();
+  if (!state.toolkit) return;
+  rescale(state.toolkit, paginationEl, notationContainer, scale);
+  reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
-/**
- * Individual scale for score 2 — rescales the right score only.
- * The shared slider and score 1 are unaffected.
- */
 scale2Input.addEventListener("input", () => {
   const scale = Number(scale2Input.value);
   updateScaleOutput(scale2Output, scale);
-  if (!toolkit2) return;
-  rescale(toolkit2, paginationEl2, notationContainer2, scale);
-  reapplyDiff();
+  if (!state.toolkit2) return;
+  rescale(state.toolkit2, paginationEl2, notationContainer2, scale);
+  reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 // ─── Diff settings listener ────────────────────────────────────────────────
 
-/**
- * Re-run the diff whenever the user changes a setting in the gear dropdown.
- * The `settings-change` event is fired by `<diff-settings>` with a
- * {@link DiffSettingsValue} detail containing the new option values.
- */
 diffSettingsEl.addEventListener("settings-change", (e) => {
   currentSettings = (e as CustomEvent<DiffSettingsValue>).detail;
-  // Sync the split toggle button label with the orientation from settings
   const isSplit = currentSettings.gitDiffOrientation === "split";
   gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(isSplit));
   gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
-  runDiff(currentSettings);
-  if (activeView === "monaco") renderCodeDiffPage();
+  runDiff(state, containers, currentSettings);
+  refreshChangeNav();
+  if (activeView === "monaco") {
+    void loadMonaco().then((monaco) => {
+      renderCodeDiffPage(
+        monaco,
+        state.originalXML,
+        state.xMLToCompare,
+        diffEditorContainer,
+        currentSettings,
+        monacoCallbacks,
+      );
+    });
+  }
 });
 
 // ─── Page-change listeners ─────────────────────────────────────────────────
-// The Pages component updates `notationContainer.innerHTML` synchronously
-// before emitting `page-change`, so highlights and ID remapping can be
-// applied immediately in the handler.
 
-/** After score 1 turns a page: remap IDs and refresh overlays. */
 paginationEl.addEventListener("page-change", () => {
   setNotationSVGIDToIndexBase(notationContainer);
-  reapplyDiff();
+  reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
-/** After score 2 turns a page: remap IDs and refresh overlays. */
 paginationEl2.addEventListener("page-change", () => {
   setNotationSVGIDToIndexBase(notationContainer2);
-  reapplyDiff();
+  reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 // ─── Verovio initialisation ────────────────────────────────────────────────
 
-/**
- * Initial render of one score.
- *
- * Order of operations matters:
- *  1. `loadData`    — parse and validate the MusicXML; must precede any
- *                     other toolkit call that depends on the loaded data.
- *  2. `setOptions`  — apply rendering options (scale, breaks, etc.).
- *  3. `getPageCount`— accurate only after loadData + setOptions.
- *  4. `renderToSVG` — produce the SVG for the first page.
- *
- * @param xmlFile    Raw MusicXML string.
- * @param pagination Pagination component bound to this score.
- * @param tk         Initialised Verovio toolkit instance.
- * @param container  `.notation-stage` element to receive the rendered SVG.
- * @param scale      Initial scale percentage.
- */
-function renderNotation(
-  xmlFile: string | null,
-  pagination: Pages,
-  tk: Toolkit | null,
-  container: HTMLDivElement,
-  scale: number,
-): void {
-  if (!tk || !xmlFile)
-    return console.warn("renderNotation: missing toolkit or XML");
-
-  const options: VerovioOptions = {
-    adjustPageHeight: true,
-    breaks: "auto",
-    scale,
-    systemMaxPerPage: 24,
-  };
-
-  tk.loadData(xmlFile); // Step 1 – must come before setOptions / getPageCount
-  tk.setOptions(options); // Step 2
-
-  pagination.total = getTotalPageCount(tk); // Step 3 – accurate now
-  pagination.toolkit = tk;
-
-  container.innerHTML = tk.renderToSVG(pagination.page); // Step 4
-  setNotationSVGIDToIndexBase(container);
-}
-
-/**
- * Verovio WASM runtime ready callback.
- *
- * Creates two toolkit instances (one per score), renders both scores at the
- * initial scale, builds per-score measure ID maps for page-aware highlighting,
- * then runs the initial diff.
- */
 verovio.module.onRuntimeInitialized = async () => {
-  toolkit = new verovio.toolkit();
-  toolkit2 = new verovio.toolkit();
+  state.toolkit = new verovio.toolkit();
+  state.toolkit2 = new verovio.toolkit();
 
-  //NOTE: Default 1st render
   try {
-    originalXML = SAMPLE_SCORES[2]?.xml ?? null;
-    xMLToCompare = SAMPLE_SCORES[0]?.xml ?? null;
+    const findScore = (id: string) => SAMPLE_SCORES.find((s) => s.id === id)?.xml ?? null;
+    state.originalXML = findScore("Chopin-etudeOp10No1V2") ?? SAMPLE_SCORES[0]?.xml ?? null;
+    state.xMLToCompare = findScore("Chopin-etudeOp10No1") ?? SAMPLE_SCORES[1]?.xml ?? null;
 
     const scale = Number(sharedScaleInput.value);
     updateScaleOutput(sharedScaleOutput, scale);
     updateScaleOutput(scale1Output, scale);
     updateScaleOutput(scale2Output, scale);
 
-    renderNotation(
-      originalXML,
-      paginationEl,
-      toolkit,
-      notationContainer,
-      scale,
-    );
-    renderNotation(
-      xMLToCompare,
-      paginationEl2,
-      toolkit2,
-      notationContainer2,
-      scale,
-    );
+    renderNotation(state.originalXML, paginationEl, state.toolkit, notationContainer, scale);
+    renderNotation(state.xMLToCompare, paginationEl2, state.toolkit2, notationContainer2, scale);
 
-    // Build id maps after loadData so getMEI returns valid data
-    measureIdMap1 = buildMeasureIdMap(toolkit);
-    measureIdMap2 = buildMeasureIdMap(toolkit2);
-    childIdMap1 = buildChildIdMap(toolkit);
-    childIdMap2 = buildChildIdMap(toolkit2);
+    state.measureIdMap1 = buildMeasureIdMap(state.toolkit);
+    state.measureIdMap2 = buildMeasureIdMap(state.toolkit2);
+    state.childIdMap1 = buildChildIdMap(state.toolkit);
+    state.childIdMap2 = buildChildIdMap(state.toolkit2);
 
-    runDiff();
+    runDiff(state, containers, currentSettings);
+    refreshChangeNav();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     notationContainer.textContent = `Unable to load score: ${message}`;

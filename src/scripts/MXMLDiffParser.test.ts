@@ -8,11 +8,11 @@
  */
 
 import {
-  getMusicXMLDiff,
-  getEnhancedMusicXMLDiff,
   formatDiffForTerminal,
+  getEnhancedMusicXMLDiff,
+  getMusicXMLDiff,
   getMusicXMLDiffStats,
-} from "@/utils/MXMLDiffParser";
+} from "./MXMLDiffParser";
 
 const args = process.argv.slice(2);
 

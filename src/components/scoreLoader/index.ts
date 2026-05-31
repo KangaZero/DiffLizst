@@ -1,10 +1,12 @@
+import { loadScoreFile, SCORE_FILE_ACCEPT } from "@/utils/loadScoreFile";
+
 /**
  * `<score-loader>` Web Component
  *
  * A "Load Score" button that opens a dropdown panel with two options:
  *  1. Pre-bundled sample scores grouped by composer, each group in a closed
  *     accordion by default (native `<details>`/`<summary>`).
- *  2. User-uploaded MusicXML file (`.xml` / `.musicxml`).
+ *  2. User-uploaded MusicXML file (`.xml`, `.musicxml`, or `.mxl`).
  *
  * When the user picks a sample or uploads a file the component dispatches a
  * `score-load` CustomEvent whose `detail` carries the raw XML string and a
@@ -248,9 +250,29 @@ template.innerHTML = `
   input[type="file"] {
     display: none;
   }
+
+  /* WCAG 2.2 SC 2.5.8 — 44×44 px minimum touch targets on coarse-pointer devices */
+  @media (pointer: coarse) {
+    .trigger {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    summary {
+      min-height: 44px;
+    }
+
+    .sample-btn {
+      min-height: 44px;
+    }
+
+    .upload-row {
+      min-height: 44px;
+    }
+  }
 </style>
 
-<button class="trigger" type="button" aria-haspopup="true" aria-expanded="false">
+<button class="trigger" type="button" aria-label="Load score" aria-haspopup="true" aria-expanded="false">
   ${MUSIC_ICON}
   Load Score
 </button>
@@ -260,7 +282,7 @@ template.innerHTML = `
   <label class="upload-row">
     ${UPLOAD_ICON}
     Choose XML file…
-    <input type="file" accept=".xml,.musicxml" />
+    <input type="file" accept="${SCORE_FILE_ACCEPT}" />
   </label>
 
   <hr class="divider" />
@@ -288,13 +310,10 @@ export class ScoreLoader extends HTMLElement {
     this.#shadow = this.attachShadow({ mode: "open" });
     this.#shadow.appendChild(template.content.cloneNode(true));
 
-    this.#triggerBtn =
-      this.#shadow.querySelector<HTMLButtonElement>(".trigger")!;
+    this.#triggerBtn = this.#shadow.querySelector<HTMLButtonElement>(".trigger")!;
     this.#panel = this.#shadow.querySelector<HTMLDivElement>(".panel")!;
-    this.#samplesList =
-      this.#shadow.querySelector<HTMLDivElement>(".samples-list")!;
-    this.#fileInput =
-      this.#shadow.querySelector<HTMLInputElement>('input[type="file"]')!;
+    this.#samplesList = this.#shadow.querySelector<HTMLDivElement>(".samples-list")!;
+    this.#fileInput = this.#shadow.querySelector<HTMLInputElement>('input[type="file"]')!;
 
     this.#triggerBtn.addEventListener("click", () => this.#toggle());
 
@@ -309,16 +328,21 @@ export class ScoreLoader extends HTMLElement {
     this.#fileInput.addEventListener("change", () => {
       const file = this.#fileInput.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        const xml = evt.target?.result;
-        if (typeof xml !== "string") return;
-        this.#dispatch(xml, file.name);
-        this.#close();
-        // Reset so the same file can be re-selected.
-        this.#fileInput.value = "";
-      };
-      reader.readAsText(file);
+      // Delegate to the shared loader so .mxl decompression lives in one place.
+      loadScoreFile(file)
+        .then(({ xml, filename }) => {
+          this.#dispatch(xml, filename);
+          this.#close();
+        })
+        .catch((err) => {
+          // Surface to the user via the title attribute; full error UI is the
+          // job of the drop-zone overlay, the picker is a low-traffic fallback.
+          this.#triggerBtn.title = err instanceof Error ? err.message : "Failed to load file";
+        })
+        .finally(() => {
+          // Reset so the same file can be re-selected.
+          this.#fileInput.value = "";
+        });
     });
   }
 

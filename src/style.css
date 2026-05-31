@@ -6,9 +6,10 @@
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
+  /* #9b35f5 passes WCAG AA (4.97:1) for text on white; #aa3bff only 4.39:1 */
+  --accent: #9b35f5;
+  --accent-bg: rgba(155, 53, 245, 0.1);
+  --accent-border: rgba(155, 53, 245, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
@@ -24,9 +25,7 @@
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 
   @media (max-width: 1024px) {
     font-size: 16px;
@@ -89,12 +88,15 @@
   --notation-staff-color: var(--text-h);
   --notation-highlight: var(--accent);
   --notation-highlight-bg: var(--accent-bg);
-  --notation-diff-add: #22c55e;
-  --notation-diff-add-bg: rgba(34, 197, 94, 0.12);
-  --notation-diff-remove: #ef4444;
-  --notation-diff-remove-bg: rgba(239, 68, 68, 0.12);
-  --notation-diff-change: #f59e0b;
-  --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+  /* #15803d = green-700: 5.02:1 on white ✓, 3.91:1 on tinted bg ✓ (>3 for UI) */
+  --notation-diff-add: #15803d;
+  --notation-diff-add-bg: rgba(21, 128, 61, 0.12);
+  /* #dc2626 = red-600: 4.83:1 on white ✓, 3.61:1 on tinted bg ✓ */
+  --notation-diff-remove: #dc2626;
+  --notation-diff-remove-bg: rgba(220, 38, 38, 0.12);
+  /* #d97706 = amber-600: 3.19:1 on white ✓ (UI threshold). Text uses #b45309 below. */
+  --notation-diff-change: #d97706;
+  --notation-diff-change-bg: rgba(217, 119, 6, 0.12);
   --notation-diff-neutral: var(--border);
 
   /* Diff panel */
@@ -110,15 +112,20 @@
   --z-modal: 300;
   --z-toast: 400;
 
-  /* Status/semantic colors */
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --color-info: #3b82f6;
-  --color-success-bg: rgba(34, 197, 94, 0.1);
-  --color-warning-bg: rgba(245, 158, 11, 0.1);
-  --color-error-bg: rgba(239, 68, 68, 0.1);
-  --color-info-bg: rgba(59, 130, 246, 0.1);
+  /* Status/semantic colors — contrast-audited for WCAG AA on white (light) */
+  /* #15803d = green-700: 5.02:1 on white ✓ */
+  --color-success: #15803d;
+  /* #d97706 = amber-600: 3.19:1 on white ✓ (UI threshold) */
+  --color-warning: #d97706;
+  /* #dc2626 = red-600: 4.83:1 on white ✓ */
+  --color-error: #dc2626;
+  --color-danger: #dc2626;
+  /* #1d4ed8 = blue-700: 4.61:1 on white ✓ */
+  --color-info: #1d4ed8;
+  --color-success-bg: rgba(21, 128, 61, 0.1);
+  --color-warning-bg: rgba(217, 119, 6, 0.1);
+  --color-error-bg: rgba(220, 38, 38, 0.1);
+  --color-info-bg: rgba(29, 78, 216, 0.1);
 }
 
 :root[data-theme='dark'] {
@@ -127,6 +134,7 @@
   --bg: #16171d;
   --border: #2e303a;
   --code-bg: #1f2028;
+  /* #c084fc: 6.77:1 on #16171d ✓ — dark accent already passes */
   --accent: #c084fc;
   --accent-bg: rgba(192, 132, 252, 0.15);
   --accent-border: rgba(192, 132, 252, 0.5);
@@ -134,6 +142,24 @@
   --shadow:
     rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   --theme-toggle-shift: 24px;
+  /* #f87171 = red-400: 6.46:1 on dark bg ✓, 5.86:1 on code-bg ✓ (was #ef4444: 4.31 on code-bg FAIL) */
+  --notation-diff-remove: #f87171;
+  --notation-diff-remove-bg: rgba(248, 113, 113, 0.12);
+  /* green-500 and amber already pass in dark — restore original values */
+  --notation-diff-add: #22c55e;
+  --notation-diff-add-bg: rgba(34, 197, 94, 0.12);
+  --notation-diff-change: #f59e0b;
+  --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+  /* Status aliases for dark theme */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #f87171;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+  --color-success-bg: rgba(34, 197, 94, 0.12);
+  --color-warning-bg: rgba(245, 158, 11, 0.12);
+  --color-error-bg: rgba(248, 113, 113, 0.12);
+  --color-info-bg: rgba(96, 165, 250, 0.12);
   color-scheme: dark;
 }
 
@@ -155,6 +181,21 @@
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
     --theme-toggle-shift: 24px;
+    --notation-diff-remove: #f87171;
+    --notation-diff-remove-bg: rgba(248, 113, 113, 0.12);
+    --notation-diff-add: #22c55e;
+    --notation-diff-add-bg: rgba(34, 197, 94, 0.12);
+    --notation-diff-change: #f59e0b;
+    --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-error: #f87171;
+    --color-danger: #f87171;
+    --color-info: #60a5fa;
+    --color-success-bg: rgba(34, 197, 94, 0.12);
+    --color-warning-bg: rgba(245, 158, 11, 0.12);
+    --color-error-bg: rgba(248, 113, 113, 0.12);
+    --color-info-bg: rgba(96, 165, 250, 0.12);
     color-scheme: dark;
   }
 
@@ -217,6 +258,15 @@ h1 {
     font-size: 36px;
     margin: 20px 0;
   }
+}
+
+/* The app title h1 in the toolbar is intentionally small; reset heading styles */
+h1.app-title {
+  font-size: var(--font-size-md);
+  letter-spacing: var(--letter-spacing-tight);
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-h);
 }
 
 h2 {
@@ -428,6 +478,210 @@ code {
   }
 }
 
+/* ─── Diff summary sidebar ──────────────────────────────────────── */
+
+.diff-summary {
+  flex: 0 0 280px;
+  border-left: 1px solid var(--border);
+  padding: 16px !important; /* override #next-steps > div { padding: 32px } */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .diff-summary {
+    flex: 1 1 auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.diff-summary--collapsed .diff-summary-body {
+  display: none;
+}
+
+.diff-summary-header {
+  display: flex;
+}
+
+.diff-summary-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.diff-summary-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.diff-summary-chevron {
+  transition: transform var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.diff-summary-toggle[aria-expanded="true"] .diff-summary-chevron {
+  transform: rotate(90deg);
+}
+
+.diff-summary-counts {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.diff-summary-count {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.diff-summary-count--add {
+  background: color-mix(in srgb, var(--color-success, var(--notation-diff-add)) 18%, transparent);
+  color: var(--color-success, var(--notation-diff-add));
+}
+
+.diff-summary-count--remove {
+  background: color-mix(in srgb, var(--color-danger, var(--notation-diff-remove)) 18%, transparent);
+  color: var(--color-danger, var(--notation-diff-remove));
+}
+
+.diff-summary-count--change {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.diff-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.diff-summary-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.diff-summary-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.diff-summary-chip[aria-pressed="true"] {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.diff-summary-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.diff-summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.diff-summary-empty {
+  font-size: 13px;
+  color: var(--text);
+  padding: 8px 4px;
+}
+
+.diff-summary-item {
+  list-style: none;
+}
+
+.diff-summary-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.diff-summary-item-btn:hover {
+  background: var(--accent-bg);
+}
+
+.diff-summary-item-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.diff-summary-item-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
+.diff-summary-item--add .diff-summary-item-type {
+  background: color-mix(in srgb, var(--color-success, var(--notation-diff-add)) 18%, transparent);
+  color: var(--color-success, var(--notation-diff-add));
+}
+
+.diff-summary-item--remove .diff-summary-item-type {
+  background: color-mix(in srgb, var(--color-danger, var(--notation-diff-remove)) 18%, transparent);
+  color: var(--color-danger, var(--notation-diff-remove));
+}
+
+.diff-summary-item--change .diff-summary-item-type {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.diff-summary-item-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notation-panel {
   display: flex;
   flex-direction: column;
@@ -499,6 +753,7 @@ code {
   z-index: var(--z-toolbar);
 }
 
+/* .app-title styles are in the h1.app-title rule above — kept here for selector specificity fallback */
 .app-title {
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-md);
@@ -515,6 +770,9 @@ code {
 .notation-stage {
   position: relative;
   width: min(100%, 720px);
+  /* Reserve vertical space so the "Loading score…" placeholder doesn't shift
+     by ~2300px when Verovio paints — keeps CLS ≈ 0. */
+  min-height: 480px;
   display: flex;
   justify-content: center;
   overflow-x: auto;
@@ -597,6 +855,47 @@ code {
   margin-bottom: var(--space-1);
 }
 
+/* Per-field summary block — appears above the raw diff body for <note>
+ * diffs that surface a recognised pitch/duration/voice/etc. change. */
+.diff-tooltip-summary {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+  font-family: var(--mono);
+}
+
+.diff-tooltip-summary li {
+  display: grid;
+  grid-template-columns: minmax(56px, auto) 1fr auto 1fr;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.diff-summary-field {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.diff-summary-before {
+  color: var(--color-removed, var(--color-danger, currentColor));
+  text-align: right;
+}
+
+.diff-summary-after {
+  color: var(--color-added, var(--color-success, currentColor));
+  text-align: left;
+}
+
+.diff-summary-arrow {
+  color: var(--text);
+  opacity: 0.6;
+}
+
 .diff-tooltip-body {
   display: flex;
   flex-direction: column;
@@ -666,11 +965,59 @@ code {
   user-select: none;
 }
 
+/* Verovio renders the SVG at the dimensions implied by toolkit `scale`.
+ * Constraining width here would defeat the scale slider — overflow scroll
+ * on `.notation-stage` handles oversized scores instead. */
 .notation-stage svg {
   display: block;
-  width: 100%;
   height: auto;
-  max-width: 100%;
+}
+
+/* ─── File drop overlay ──────────────────────────────────────────
+ * Invisible and non-interactive until the user drags a file over the
+ * notation stage or focuses the overlay via keyboard. Then it expands to
+ * fill the stage and shows an upload hint. */
+.file-drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent-bg) 92%, transparent);
+  border: 2px dashed var(--accent-border);
+  border-radius: inherit;
+  color: var(--text-h);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast);
+  z-index: var(--z-raised, 10);
+}
+
+.notation-stage.file-drop--active .file-drop-overlay {
+  opacity: 1;
+}
+
+.file-drop-overlay:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -6px;
+}
+
+.file-drop-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.file-drop-hint {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 400;
 }
 
 /* ─── Toolbar view-toggle button ──────────────────────────────── */
@@ -703,6 +1050,103 @@ code {
 .view-toggle-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ─── Toolbar change navigation ─────────────────────────────────── */
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 auto;
+}
+
+.change-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast), opacity
+    var(--duration-fast);
+}
+
+.change-nav-btn:hover:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.change-nav-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.change-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.change-nav-counter {
+  font-family: var(--mono);
+  font-size: var(--font-size-xs);
+  color: var(--text);
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Brief pulse applied to a diff overlay when next/prev navigation focuses
+ * it.  Honour prefers-reduced-motion so users sensitive to motion get an
+ * instant solid highlight instead. */
+@keyframes diff-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-border);
+  }
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+.diff-overlay.diff-overlay--focus {
+  animation: diff-pulse 800ms ease-out 2;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-overlay.diff-overlay--focus {
+    animation: none;
+  }
+}
+
+/* ─── Hover-link: overlay highlighted from Monaco cursor ─────────────────── */
+/* Contrast preserved: outline colours inherit from the per-type variables     */
+/* which are already WCAG-AA audited in both light and dark themes.            */
+
+.diff-overlay.diff-overlay--hover-link {
+  outline-width: 2px;
+  outline-offset: 2px;
+  filter: brightness(1.15);
+  transition:
+    outline-width var(--duration-fast) var(--ease-base),
+    filter var(--duration-fast) var(--ease-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-overlay.diff-overlay--hover-link {
+    transition: none;
+  }
+}
+
+/* Monaco line decoration triggered by overlay hover */
+.diff-line--hover-link {
+  background: var(--accent-bg);
 }
 
 .view-toggle-btn[aria-pressed='true'] {
@@ -1053,3 +1497,284 @@ code {
     border-right-color: var(--border);
   }
 }
+
+/* ─── App footer ────────────────────────────────────────────────── */
+
+.app-footer {
+  border-top: 1px solid var(--border);
+  background: var(--code-bg);
+  padding: 16px 24px;
+  margin-top: auto;
+}
+
+.app-footer-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-size: var(--font-size-xs);
+  color: var(--text);
+}
+
+.app-footer-link {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text) 40%, transparent);
+  transition: color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.app-footer-link:hover,
+.app-footer-link:focus-visible {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  outline: none;
+}
+
+.app-footer-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.app-footer-sep {
+  opacity: 0.4;
+}
+
+.app-footer-version {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-footer-credits {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ─── Skip-to-content link ──────────────────────────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  border-radius: 0 0 var(--radius-sm) 0;
+  z-index: calc(var(--z-toast) + 1);
+  /* Visually hidden until focused — use clip-path, not deprecated clip */
+  clip-path: inset(50%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-decoration: none;
+  transition: clip-path var(--duration-fast);
+}
+
+.skip-link:focus-visible {
+  clip-path: inset(0);
+  outline: 2px solid #fff;
+  outline-offset: -4px;
+}
+
+/* ─── Responsive: vertical panel stack below 900px ─────────────────────── */
+
+@media (max-width: 900px) {
+  #next-steps {
+    flex-direction: column;
+  }
+
+  #docs,
+  #social {
+    flex: 1 1 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Sidebar becomes an overlay on mobile — hidden by default */
+  .diff-summary {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: min(300px, 85vw);
+    border-left: 1px solid var(--border);
+    border-top: none;
+    background: var(--bg);
+    box-shadow: var(--shadow);
+    z-index: var(--z-overlay);
+    translate: 100% 0;
+    transition: translate var(--duration-base) var(--ease-base);
+    overflow-y: auto;
+    padding: 16px !important;
+    flex: none;
+  }
+
+  .diff-summary[data-mobile-open="true"] {
+    translate: 0 0;
+  }
+
+  /* Backdrop — covers the notation area when sidebar is open */
+  .diff-summary[data-mobile-open="true"]::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    inset-inline-end: min(300px, 85vw);
+    background: rgba(0, 0, 0, 0.4);
+    z-index: -1;
+  }
+
+  /* Close button inside sidebar — only visible on mobile */
+  .diff-summary-mobile-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: auto;
+    margin-block-end: 8px;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-h);
+    cursor: pointer;
+  }
+
+  .diff-summary-mobile-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Show the toolbar open-sidebar button on mobile */
+  .toolbar-summary-open {
+    display: inline-flex;
+  }
+
+  /* Toolbar wraps on very small viewports */
+  #toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--toolbar-height);
+    padding-block: 8px;
+  }
+}
+
+@media (min-width: 901px) {
+  /* Desktop: hide the mobile-only controls */
+  .diff-summary-mobile-close {
+    display: none;
+  }
+
+  .toolbar-summary-open {
+    display: none;
+  }
+}
+
+/* ─── Toolbar wrap at 600px ─────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  #toolbar {
+    padding-inline: 16px;
+    gap: 8px;
+  }
+
+  .toolbar-center {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin: 0;
+    padding-block-end: 4px;
+  }
+
+  /* Scale controls wrap inside their flex container (already has flex-wrap) */
+  .notation-controls.shared-controls {
+    padding-inline: 16px;
+  }
+}
+
+/* ─── Swap scores button ────────────────────────────────────────────────── */
+
+/* Inherits all sizing/border/cursor/transition from .change-nav-btn.
+ * Flips the icon horizontally on hover to suggest the swap direction.
+ * Guarded by prefers-reduced-motion so users sensitive to motion are unaffected. */
+@media (prefers-reduced-motion: no-preference) {
+  .swap-btn:hover:not(:disabled) svg {
+    transform: scaleX(-1);
+    transition: transform var(--duration-fast);
+  }
+}
+
+/* ─── Touch targets: 44×44 px minimum on coarse-pointer devices ────────── */
+
+@media (pointer: coarse) {
+  .change-nav-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .view-toggle-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .diff-summary-chip {
+    min-height: 44px;
+    padding-block: 10px;
+  }
+
+  .diff-summary-item-btn {
+    min-height: 44px;
+  }
+
+  .diff-summary-toggle {
+    min-height: 44px;
+  }
+
+  .diff-summary-mobile-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Score loader and diff-settings are inside Shadow DOM; their coarse-pointer
+   * rules live in each component's own <style> block (WCAG 2.2 SC 2.5.8). */
+}
+
+/* ─── prefers-reduced-motion: disable slide + pulse animations ──────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-summary {
+    transition: none;
+  }
+
+  .theme-toggle-thumb {
+    transition: none;
+  }
+
+  .diff-summary-chevron {
+    transition: none;
+  }
+
+  .skip-link {
+    transition: none;
+  }
+}
+
+/* ─── Diff summary count colors ─────────────────────────────────────────── */
+/* --color-danger and --color-success are defined in :root above and overridden
+ * in the dark theme blocks. The fallback values in var() chains are now
+ * redundant but kept for defensive coding — they resolve to the notation
+ * diff colors which have already been contrast-audited. */
+
+/* ─── Diff tooltip / line text contrast fix in light theme ─────────────── */
+
+/* .diff-line-add uses --notation-diff-add as text colour. In light theme
+ * #15803d (5.02:1 on white) and on add-bg (3.91:1) — UI threshold ≥3 ✓ */
+
+/* .diff-line-remove uses --notation-diff-remove as text colour.
+ * Light: #dc2626 (4.83:1 on white ✓). Dark: #f87171 (5.86:1 on code-bg ✓) */
+
+/* .diff-summary-count--change uses var(--accent) which is now #9b35f5 (4.97:1) ✓ */

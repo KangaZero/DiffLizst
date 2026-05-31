@@ -9,10 +9,21 @@ lerna-debug.log*
 
 .env
 
+# Stale lockfiles from other package managers — pnpm only.
+package-lock.json
+yarn.lock
+bun.lock
+
 node_modules
 dist
+dist-lib
 dist-ssr
 *.local
+
+# Playwright
+test-results
+playwright-report
+playwright/.cache
 
 # Editor directories and files
 .vscode/*
@@ -24,3 +35,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.claude/

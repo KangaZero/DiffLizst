@@ -1,0 +1,86 @@
+name: Release library to npm
+
+# Triggered when you push a semver tag like `v0.2.0`. The workflow:
+#   1. Runs the full test suite (unit + e2e) as a final gate.
+#   2. Builds the library to dist-lib/.
+#   3. Publishes to npm IF `vars.PUBLISH_TO_NPM == 'true'` AND `NPM_TOKEN` is set.
+#      Otherwise it logs "publish skipped" and exits 0 — so dry-runs work.
+#
+# Why two switches: `NPM_TOKEN` is a per-secret existence check (set once at the
+# repo level), `PUBLISH_TO_NPM` is a per-event opt-in (a repo variable you flip
+# to `true` only when you actually want to ship). This prevents a forgotten
+# `git tag v0.2.0; git push --tags` from auto-publishing on day one.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance
+
+jobs:
+  verify:
+    name: Verify (lint + typecheck + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm run lint
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Unit + integration tests
+        run: pnpm run test:unit
+      - name: Install Playwright browsers
+        run: pnpm dlx playwright install --with-deps chromium
+      - name: Build (required for e2e library-export test)
+        run: |
+          pnpm run build
+          pnpm run build:lib
+      - name: Playwright tests
+        run: pnpm run test:e2e
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build library
+        run: pnpm run build:lib
+      - name: Check if publish is enabled
+        id: gate
+        run: |
+          if [[ "${{ vars.PUBLISH_TO_NPM }}" != "true" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Publish skipped: vars.PUBLISH_TO_NPM is not 'true' (current: '${{ vars.PUBLISH_TO_NPM }}')"
+          elif [[ -z "${NPM_TOKEN:-}" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Publish skipped: NPM_TOKEN secret is not set"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "Publish enabled — proceeding"
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm
+        if: steps.gate.outputs.publish == 'true'
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

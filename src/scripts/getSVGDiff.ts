@@ -1,6 +1,6 @@
-import etudeMei from '@/scores/Chopin/etudeOp10No1.xml?raw'
-import etudeMei2 from '@/scores/Chopin/etudeOp10No2.xml?raw'
 import { unlinkSync } from "node:fs";
+import etudeMei from "@/scores/Chopin/etudeOp10No1.xml?raw";
+import etudeMei2 from "@/scores/Chopin/etudeOp10No2.xml?raw";
 
 export async function getSVGDiff() {
   // 1. Define temporary paths
@@ -9,10 +9,7 @@ export async function getSVGDiff() {
 
   try {
     // 2. Write the raw strings to actual files
-    await Promise.all([
-      Bun.write(path1, etudeMei),
-      Bun.write(path2, etudeMei2)
-    ]);
+    await Promise.all([Bun.write(path1, etudeMei), Bun.write(path2, etudeMei2)]);
 
     // 3. Run git diff on the FILE PATHS
     const proc = Bun.spawn([
@@ -25,7 +22,7 @@ export async function getSVGDiff() {
       "--no-index",
       // "-U5", // How many lines of padding
       path1,
-      path2
+      path2,
     ]);
     // const proc = Bun.spawn(["git", "diff", "--no-index", "-w", "--line-prefix", path1, path2]);
 
@@ -35,7 +32,7 @@ export async function getSVGDiff() {
     // 5. Clean up the temp files
     unlinkSync(path1);
     unlinkSync(path2);
-    console.log(text)
+    console.log(text);
 
     return text;
   } catch (error) {
@@ -47,4 +44,4 @@ export async function getSVGDiff() {
   }
 }
 
-getSVGDiff()
+getSVGDiff();

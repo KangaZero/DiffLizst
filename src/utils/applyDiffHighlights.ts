@@ -24,10 +24,38 @@
  * overlays are removed.
  */
 
+import type { OverlayRecord } from "@/bootstrap/hover-link";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "./diffXML";
 
 /** Singleton tooltip element shared across all overlays. */
 let tooltipEl: HTMLDivElement | null = null;
+
+/**
+ * Flat list of every overlay created in the most recent applyDiffHighlights
+ * call, in creation order. Exposed so the hover-link module can rebuild its
+ * line → overlay lookup without re-querying the DOM.
+ *
+ * Replaced atomically at the top of each applyDiffHighlights call, so callers
+ * holding a reference from a previous render should not cache it across renders.
+ */
+let lastOverlayRecords: OverlayRecord[] = [];
+
+/** Return the overlay records from the most recent applyDiffHighlights call. */
+export function getOverlayRecords(): readonly OverlayRecord[] {
+  return lastOverlayRecords;
+}
+
+/** Both line-number variants cached per ElementDiff object. */
+const tooltipCache = new WeakMap<ElementDiff, { with: string; without: string }>();
+
+function cachedTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
+  let entry = tooltipCache.get(diff);
+  if (!entry) {
+    entry = { with: buildTooltipHTML(diff, true), without: buildTooltipHTML(diff, false) };
+    tooltipCache.set(diff, entry);
+  }
+  return showLineNumbers ? entry.with : entry.without;
+}
 
 /**
  * Return the singleton `#diff-tooltip` element, creating and appending it to
@@ -65,16 +93,31 @@ function getTooltip(): HTMLDivElement {
  * @param diff            The element diff to render.
  * @param showLineNumbers Whether to prepend old/new line number columns.
  */
+function escapeHTML(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
   const header = `<span class="diff-tooltip-header">@@ ${diff.label} @@</span>`;
+  // Field-level summary (e.g. "pitch: C4 -> E4") only present for <note>
+  // diffs that recognised at least one semantic field change.
+  const summary =
+    diff.summary && diff.summary.length > 0
+      ? `<ul class="diff-tooltip-summary">${diff.summary
+          .map(
+            (s) =>
+              `<li><span class="diff-summary-field">${escapeHTML(s.field)}</span>` +
+              `<span class="diff-summary-before">${escapeHTML(s.before)}</span>` +
+              `<span class="diff-summary-arrow" aria-hidden="true">&rarr;</span>` +
+              `<span class="diff-summary-after">${escapeHTML(s.after)}</span></li>`,
+          )
+          .join("")}</ul>`
+      : "";
   const body = diff.lines
     .map((l) => {
       const prefix = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
       const cls = `diff-line-${l.type}`;
-      const escaped = l.content
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const escaped = escapeHTML(l.content);
       if (showLineNumbers) {
         const oldNo = l.oldLineNo != null ? String(l.oldLineNo) : "";
         const newNo = l.newLineNo != null ? String(l.newLineNo) : "";
@@ -90,7 +133,7 @@ function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
       return `<span class="${cls}">${prefix}${escaped}</span>`;
     })
     .join("");
-  return `${header}<code class="diff-tooltip-body">${body}</code>`;
+  return `${header}${summary}<code class="diff-tooltip-body">${body}</code>`;
 }
 
 /**
@@ -136,10 +179,13 @@ function createOverlay(
   showLineNumbers: boolean,
 ): HTMLDivElement {
   const tooltip = getTooltip();
-  const html = buildTooltipHTML(diff, showLineNumbers);
+  const html = cachedTooltipHTML(diff, showLineNumbers);
 
   const overlay = document.createElement("div");
   overlay.className = `diff-overlay diff-overlay--${diff.changeType}`;
+  // Carry the diff label so the next/prev nav can locate this overlay by
+  // change identity rather than positional index (which shifts on page turn).
+  overlay.dataset.diffLabel = diff.label;
 
   // Convert viewport-relative rect to container-relative coordinates,
   // then add scroll offset so overlays stay correct after scrolling.
@@ -172,6 +218,15 @@ function createOverlay(
   });
 
   return overlay;
+}
+
+/**
+ * Append an overlay to a container and register it in the module-level record
+ * list so the hover-link module can iterate them without another DOM query.
+ */
+function appendOverlay(container: HTMLElement, overlay: HTMLDivElement, diff: ElementDiff): void {
+  container.appendChild(overlay);
+  lastOverlayRecords.push({ overlay, diff });
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -252,7 +307,7 @@ export function buildMeasureIdMap(toolkit: {
     doc.querySelectorAll("measure").forEach((m, idx) => {
       const id = m.getAttribute("xml:id");
       // MEI 'n' = measure number; fall back to 1-based document index
-      const n = parseInt(m.getAttribute("n") ?? String(idx + 1), 10);
+      const n = Number.parseInt(m.getAttribute("n") ?? String(idx + 1), 10);
       if (id) map.set(id, n);
     });
   } catch (err) {
@@ -295,12 +350,16 @@ export function applyDiffHighlights(
   svgToChildKey2: Map<string, ChildDiffKey>,
   showLineNumbers = true,
 ): void {
-  // Remove stale overlays from the previous render
-  [container1, container2].forEach((c) =>
-    c.querySelectorAll(".diff-overlay").forEach((el) => el.remove()),
-  );
+  // Reset registry before populating so callers always get the current set
+  lastOverlayRecords = [];
 
-  console.log("diff", diff);
+  // Remove stale overlays from the previous render
+  for (const c of [container1, container2]) {
+    for (const el of c.querySelectorAll(".diff-overlay")) {
+      el.remove();
+    }
+  }
+
   // ── Measures ──────────────────────────────────────────────────────────
   // Iterate only the g.measure elements present in the current page's SVG.
   // Each is resolved to its measure number via the id map — this correctly
@@ -312,7 +371,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "add") return; // 'add' only shown on right side
-    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
+    appendOverlay(container1, createOverlay(el, container1, d, showLineNumbers), d);
   });
 
   container2.querySelectorAll<SVGGElement>("g.measure").forEach((el) => {
@@ -321,7 +380,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "remove") return; // 'remove' only shown on left side
-    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
+    appendOverlay(container2, createOverlay(el, container2, d, showLineNumbers), d);
   });
 
   // ── Credits (page header text) ─────────────────────────────────────────
@@ -330,29 +389,24 @@ export function applyDiffHighlights(
   // texts arrays are empty, making the loop below a safe no-op.
   const pgHead1 = container1.querySelector("g.pgHead");
   const pgHead2 = container2.querySelector("g.pgHead");
-  const texts1 = pgHead1
-    ? Array.from(pgHead1.querySelectorAll<SVGTextElement>("text"))
-    : [];
-  const texts2 = pgHead2
-    ? Array.from(pgHead2.querySelectorAll<SVGTextElement>("text"))
-    : [];
+  const texts1 = pgHead1 ? Array.from(pgHead1.querySelectorAll<SVGTextElement>("text")) : [];
+  const texts2 = pgHead2 ? Array.from(pgHead2.querySelectorAll<SVGTextElement>("text")) : [];
 
   for (const [idx, d] of diff.credits.entries()) {
     const t1 = texts1[idx];
     const t2 = texts2[idx];
     if (t1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(createOverlay(t1, container1, d, showLineNumbers));
+      appendOverlay(container1, createOverlay(t1, container1, d, showLineNumbers), d);
     }
     if (t2 && (d.changeType === "change" || d.changeType === "add")) {
-      container2.appendChild(createOverlay(t2, container2, d, showLineNumbers));
+      appendOverlay(container2, createOverlay(t2, container2, d, showLineNumbers), d);
     }
   }
 
-  //TODO: add in the part=list as well as other tags needed
-  // ── Part Lists (Instrument Name) ─────────────────────────────────────────
-  // Verovio renders <credit> content as <text> elements inside g.pgHead.
-  // Only present on page 1 — on other pages querySelector returns null and
-  // texts arrays are empty, making the loop below a safe no-op.
+  // ── Part Lists (Instrument Names) ────────────────────────────────────────
+  // Verovio renders <part-list>/<score-instrument> content as <tspan> elements
+  // inside g.label. Same per-page caveat as credits — querySelector returns
+  // null on pages without the label group, making the loop a safe no-op.
   const partList1 = container1.querySelector("g.label");
   const partList2 = container2.querySelector("g.label");
   const instrumentText1 = partList1
@@ -362,26 +416,16 @@ export function applyDiffHighlights(
     ? Array.from(partList2.querySelectorAll<SVGTextElement>("tspan"))
     : [];
 
-  for (const [idx, d] of diff.credits.entries()) {
+  for (const [idx, d] of diff.partLists.entries()) {
     const it1 = instrumentText1[idx];
     const it2 = instrumentText2[idx];
     if (it1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(
-        createOverlay(it1, container1, d, showLineNumbers),
-      );
+      appendOverlay(container1, createOverlay(it1, container1, d, showLineNumbers), d);
     }
-    if (it2 && (d.changeType === "change" || d.changeType === "remove")) {
-      container2.appendChild(
-        createOverlay(it2, container2, d, showLineNumbers),
-      );
+    if (it2 && (d.changeType === "change" || d.changeType === "add")) {
+      appendOverlay(container2, createOverlay(it2, container2, d, showLineNumbers), d);
     }
   }
-  // const partListTxt1 = partList1
-  //
-  // for (let i = 0; i < .length; i++) {
-  //   const element = array[i];
-  //
-  // }
   // ── Detailed child diffs (note / rest level) ───────────────────────────
   // Mirrors the measure overlay approach: iterate SVG elements on the current
   // page, resolve their diff key from the reverse map, then look up the diff.
@@ -392,7 +436,7 @@ export function applyDiffHighlights(
     if (!key) return;
     const d = diff.children.get(key);
     if (!d || d.changeType === "add") return;
-    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
+    appendOverlay(container1, createOverlay(el, container1, d, showLineNumbers), d);
   });
 
   container2.querySelectorAll<SVGGElement>("g.note, g.rest").forEach((el) => {
@@ -400,6 +444,6 @@ export function applyDiffHighlights(
     if (!key) return;
     const d = diff.children.get(key);
     if (!d || d.changeType === "remove") return;
-    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
+    appendOverlay(container2, createOverlay(el, container2, d, showLineNumbers), d);
   });
 }
