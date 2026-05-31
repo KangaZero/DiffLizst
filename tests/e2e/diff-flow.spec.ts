@@ -126,6 +126,69 @@ test.describe("DiffLizst — full flow", () => {
     await expect(gitDiffPage).not.toHaveClass(/\bvisible\b/);
   });
 
+  test("scale slider visibly resizes SVG", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+
+    // Set a known baseline scale before measuring — ensures we aren't starting
+    // at the slider's max value where a further increase is impossible.
+    await page.locator("#notation-scale").evaluate((el: HTMLInputElement) => {
+      el.value = "50";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    // Wait for Verovio to re-render at scale 50 before snapshotting width.
+    await page.waitForFunction(
+      () => {
+        const svg = document.querySelector<SVGSVGElement>("#XML-notation svg");
+        return svg !== null;
+      },
+      { timeout: 10_000 },
+    );
+
+    const widthAtScale50 = await page.evaluate(() => {
+      const svg = document.querySelector<SVGSVGElement>("#XML-notation svg");
+      return svg?.getBoundingClientRect().width ?? 0;
+    });
+
+    // Increase to a substantially larger scale to force a measurable resize.
+    await page.locator("#notation-scale").evaluate((el: HTMLInputElement) => {
+      el.value = "150";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    // Poll until the SVG width actually changes — Verovio re-renders synchronously
+    // but the DOM swap may be one microtask behind the input event.
+    await page.waitForFunction(
+      (baseline) => {
+        const svg = document.querySelector<SVGSVGElement>("#XML-notation svg");
+        return (svg?.getBoundingClientRect().width ?? 0) > baseline;
+      },
+      widthAtScale50,
+      { timeout: 10_000 },
+    );
+
+    const widthAtScale150 = await page.evaluate(() => {
+      const svg = document.querySelector<SVGSVGElement>("#XML-notation svg");
+      return svg?.getBoundingClientRect().width ?? 0;
+    });
+
+    expect(widthAtScale150).toBeGreaterThan(widthAtScale50);
+  });
+
+  test("detailedDiff defaults ON — note-level overlays visible on first load", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+
+    // With detailedDiff defaulting to true, applyDiffHighlights attaches
+    // .diff-overlay elements directly inside g.note / g.rest SVG nodes.
+    // At least one must be attached when two different scores are loaded.
+    const noteOverlay = page
+      .locator(`${NOTATION} svg g.note .diff-overlay, ${NOTATION} svg g.rest .diff-overlay`)
+      .first();
+    await expect(noteOverlay).toBeAttached({ timeout: 10_000 });
+  });
+
   test("diff settings change re-renders without errors", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (msg) => {
