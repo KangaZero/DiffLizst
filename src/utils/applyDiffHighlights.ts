@@ -167,6 +167,9 @@ function createOverlay(
 
   const overlay = document.createElement("div");
   overlay.className = `diff-overlay diff-overlay--${diff.changeType}`;
+  // Carry the diff label so the next/prev nav can locate this overlay by
+  // change identity rather than positional index (which shifts on page turn).
+  overlay.dataset.diffLabel = diff.label;
 
   // Convert viewport-relative rect to container-relative coordinates,
   // then add scroll offset so overlays stay correct after scrolling.

@@ -21,6 +21,7 @@ import {
 } from "@/bootstrap/notation-pipeline";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
+import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 import { loadScoreFile } from "@/utils/loadScoreFile";
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
@@ -87,6 +88,9 @@ const gitDiffHunksEl = document.querySelector<HTMLElement>("#git-diff-hunks")!;
 const gitDiffSplitToggleBtn = document.querySelector<HTMLButtonElement>("#git-diff-split-toggle")!;
 const diffEditorContainer = document.querySelector<HTMLElement>("#diff-editor-container")!;
 const diffEditToggleBtn = document.querySelector<HTMLButtonElement>("#diff-edit-toggle")!;
+const prevChangeBtn = document.querySelector<HTMLButtonElement>("#prev-change")!;
+const nextChangeBtn = document.querySelector<HTMLButtonElement>("#next-change")!;
+const changeCounterEl = document.querySelector<HTMLSpanElement>("#change-counter")!;
 
 if (
   !notationContainer ||
@@ -107,7 +111,10 @@ if (
   !gitDiffHunksEl ||
   !gitDiffSplitToggleBtn ||
   !diffEditorContainer ||
-  !diffEditToggleBtn
+  !diffEditToggleBtn ||
+  !prevChangeBtn ||
+  !nextChangeBtn ||
+  !changeCounterEl
 ) {
   throw new Error("Required app elements not found in DOM");
 }
@@ -168,7 +175,10 @@ function rerenderScore2Background(xml: string): void {
 }
 
 const monacoCallbacks = {
-  runDiff: () => runDiff(state, containers, currentSettings),
+  runDiff: () => {
+    runDiff(state, containers, currentSettings);
+    refreshChangeNav();
+  },
   rerenderScore2: rerenderScore2Background,
 };
 
@@ -283,6 +293,7 @@ function wireScoreLoader(el: ScoreLoader, which: 1 | 2): void {
       makeModelUpdateCb(),
       makeFilenameCb(),
     );
+    refreshChangeNav();
     if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
   });
 }
@@ -313,6 +324,7 @@ function wireDropZone(stage: HTMLElement, which: 1 | 2, slotLabel: string): void
           makeModelUpdateCb(),
           makeFilenameCb(),
         );
+        refreshChangeNav();
         if (activeView === "gitdiff") {
           renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
         }
@@ -327,6 +339,95 @@ function wireDropZone(stage: HTMLElement, which: 1 | 2, slotLabel: string): void
 
 wireDropZone(notationContainer, 1, "score 1");
 wireDropZone(notationContainer2, 2, "score 2");
+
+// ─── Change navigation (next / prev) ──────────────────────────────────────
+// Flat ordered list of every change, rebuilt after each runDiff so the
+// keyboard shortcuts and counter always reflect the current diff. Held at
+// module scope rather than recomputed per keypress because the j/k cadence
+// can be fast and a typical Chopin diff produces hundreds of entries.
+
+let currentChanges: ChangeEntry[] = [];
+let currentChangeIdx = -1;
+
+function refreshChangeNav(): void {
+  currentChanges = flattenChanges(state.xmlDiff);
+  currentChangeIdx = currentChanges.length > 0 ? 0 : -1;
+  updateChangeCounter();
+  prevChangeBtn.disabled = currentChanges.length === 0;
+  nextChangeBtn.disabled = currentChanges.length === 0;
+}
+
+function updateChangeCounter(): void {
+  if (currentChanges.length === 0) {
+    changeCounterEl.textContent = "0 of 0";
+    return;
+  }
+  changeCounterEl.textContent = `${currentChangeIdx + 1} of ${currentChanges.length}`;
+}
+
+/**
+ * Scroll both notation stages so the overlay for the active change is in
+ * view, then briefly pulse the overlay so the user can spot it. Falls back
+ * silently when the change has no rendered overlay (e.g. a credit on a page
+ * that isn't currently shown).
+ */
+function focusChange(idx: number): void {
+  if (idx < 0 || idx >= currentChanges.length) return;
+  currentChangeIdx = idx;
+  updateChangeCounter();
+  const change = currentChanges[idx];
+
+  // Each stage has one overlay per ElementDiff; find by data attribute if
+  // present, else fall back to label match in tooltip-header text.
+  for (const container of containers) {
+    // Strip old pulse class so re-triggering works for the same overlay.
+    container.querySelectorAll(".diff-overlay--focus").forEach((el) => {
+      el.classList.remove("diff-overlay--focus");
+    });
+    const overlays = container.querySelectorAll<HTMLDivElement>(".diff-overlay");
+    for (const overlay of overlays) {
+      if (overlay.dataset.diffLabel === change.diff.label) {
+        overlay.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        overlay.classList.add("diff-overlay--focus");
+        // Remove the pulse class after the animation so the next nav can
+        // trigger it again. Matches the 800ms * 2 from CSS.
+        setTimeout(() => overlay.classList.remove("diff-overlay--focus"), 1700);
+        break;
+      }
+    }
+  }
+}
+
+prevChangeBtn.addEventListener("click", () => {
+  if (currentChanges.length === 0) return;
+  focusChange((currentChangeIdx - 1 + currentChanges.length) % currentChanges.length);
+});
+nextChangeBtn.addEventListener("click", () => {
+  if (currentChanges.length === 0) return;
+  focusChange((currentChangeIdx + 1) % currentChanges.length);
+});
+
+document.addEventListener("keydown", (e) => {
+  // Don't hijack keys while the user is typing in an input / editor.
+  const target = e.target as HTMLElement | null;
+  if (
+    target &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable ||
+      target.closest(".monaco-editor"))
+  ) {
+    return;
+  }
+  if (currentChanges.length === 0) return;
+  if (e.key === "j" || e.key === "ArrowDown") {
+    e.preventDefault();
+    focusChange((currentChangeIdx + 1) % currentChanges.length);
+  } else if (e.key === "k" || e.key === "ArrowUp") {
+    e.preventDefault();
+    focusChange((currentChangeIdx - 1 + currentChanges.length) % currentChanges.length);
+  }
+});
 
 // ─── Button wiring ─────────────────────────────────────────────────────────
 
@@ -381,6 +482,7 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
   gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(isSplit));
   gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
   runDiff(state, containers, currentSettings);
+  refreshChangeNav();
   if (activeView === "monaco")
     renderCodeDiffPage(
       state.originalXML,
@@ -427,6 +529,7 @@ verovio.module.onRuntimeInitialized = async () => {
     state.childIdMap2 = buildChildIdMap(state.toolkit2);
 
     runDiff(state, containers, currentSettings);
+    refreshChangeNav();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     notationContainer.textContent = `Unable to load score: ${message}`;
