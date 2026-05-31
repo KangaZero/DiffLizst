@@ -796,3 +796,15 @@ test.describe("Hover-link bidirectional highlight", () => {
     expect(hadDecoration).toBe(true);
   });
 });
+
+// ─── Print stylesheet ──────────────────────────────────────────────────────
+
+test.describe("Print stylesheet", () => {
+  test("toolbar is hidden in print media", async ({ page }) => {
+    await page.goto("/");
+    await page.emulateMedia({ media: "print" });
+
+    const toolbar = page.locator("header#toolbar");
+    await expect(toolbar).toBeHidden();
+  });
+});

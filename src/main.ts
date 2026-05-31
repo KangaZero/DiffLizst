@@ -27,6 +27,7 @@ import {
   swapScores,
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
+import { wireMeasureJump } from "@/bootstrap/measure-jump";
 import { wireScrollSync } from "@/bootstrap/scroll-sync";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
@@ -106,6 +107,7 @@ const diffSummaryMobileCloseBtn = document.querySelector<HTMLButtonElement>(
 const diffSummaryOpenBtn = document.querySelector<HTMLButtonElement>("#toolbar-summary-open");
 const swapScoresBtn = document.querySelector<HTMLButtonElement>("#swap-scores")!;
 const printBtn = document.querySelector<HTMLButtonElement>("#print-btn");
+const measureJumpInput = document.querySelector<HTMLInputElement>("#measure-jump-input")!;
 
 if (
   !notationContainer ||
@@ -132,7 +134,8 @@ if (
   !changeCounterEl ||
   !diffSummaryAside ||
   !diffSummaryMobileCloseBtn ||
-  !swapScoresBtn
+  !swapScoresBtn ||
+  !measureJumpInput
 ) {
   throw new Error("Required app elements not found in DOM");
 }
@@ -561,6 +564,14 @@ swapScoresBtn.addEventListener("click", () => {
 });
 
 printBtn?.addEventListener("click", () => window.print());
+
+// ─── Measure-jump wiring ───────────────────────────────────────────────────
+
+wireMeasureJump(measureJumpInput, {
+  state,
+  containers,
+  paginations: [paginationEl, paginationEl2],
+});
 
 wireEditToggle(diffEditToggleBtn);
 
