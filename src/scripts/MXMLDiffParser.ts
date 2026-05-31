@@ -85,7 +85,7 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
       }
       currentHunk.lines.push({
         type,
-        content: line.substring(1), // Remove +/- prefix
+        content: line.slice(1), // Remove +/- prefix
       });
     }
   }
