@@ -26,25 +26,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v4
         with:
-          bun-version: latest
+          version: "11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Lint
-        run: bun run lint
+        run: pnpm run lint
       - name: Typecheck
-        run: bun run typecheck
+        run: pnpm run typecheck
       - name: Unit + integration tests
-        run: bun run test:unit
+        run: pnpm run test:unit
       - name: Install Playwright browsers
-        run: bunx playwright install --with-deps chromium
+        run: pnpm dlx playwright install --with-deps chromium
       - name: Build (required for e2e library-export test)
         run: |
-          bun run build
-          bun run build:lib
+          pnpm run build
+          pnpm run build:lib
       - name: Playwright tests
-        run: bun run test:e2e
+        run: pnpm run test:e2e
 
   publish:
     name: Publish to npm
@@ -52,17 +56,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v4
         with:
-          bun-version: latest
+          version: "11"
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Build library
-        run: bun run build:lib
+        run: pnpm run build:lib
       - name: Check if publish is enabled
         id: gate
         run: |
