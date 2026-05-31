@@ -112,18 +112,18 @@ template.innerHTML = `
   }
 
   .trigger:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.1));
-    border-color: var(--accent-border, rgba(170,59,255,0.5));
+    background: var(--accent-bg, rgba(155,53,245,0.1));
+    border-color: var(--accent-border, rgba(155,53,245,0.5));
   }
 
   .trigger:focus-visible {
-    outline: 2px solid var(--accent, #aa3bff);
+    outline: 2px solid var(--accent, #9b35f5);
     outline-offset: 2px;
   }
 
   .trigger[aria-expanded="true"] {
-    background: var(--accent-bg, rgba(170,59,255,0.1));
-    border-color: var(--accent-border, rgba(170,59,255,0.5));
+    background: var(--accent-bg, rgba(155,53,245,0.1));
+    border-color: var(--accent-border, rgba(155,53,245,0.5));
   }
 
   .panel {
@@ -164,7 +164,7 @@ template.innerHTML = `
   }
 
   .row:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.05));
+    background: var(--accent-bg, rgba(155,53,245,0.05));
   }
 
   label {
@@ -200,7 +200,7 @@ template.innerHTML = `
   input[type="checkbox"] {
     width: 16px;
     height: 16px;
-    accent-color: var(--accent, #aa3bff);
+    accent-color: var(--accent, #9b35f5);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -253,13 +253,22 @@ template.innerHTML = `
       min-height: 44px;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trigger,
+    .row,
+    summary,
+    .chevron {
+      transition: none;
+    }
+  }
 </style>
 
 <button class="trigger" type="button" aria-label="Diff settings" aria-expanded="false" aria-haspopup="true">
   ${GEAR_SVG}
 </button>
 
-<div class="panel" role="menu" aria-label="Diff settings panel">
+<div class="panel" role="dialog" aria-modal="true" aria-label="Diff settings">
   <div class="panel-header">Diff settings</div>
 
   <div class="row">
@@ -426,10 +435,11 @@ export class DiffSettings extends HTMLElement {
     this._trigger.setAttribute("aria-expanded", "true");
   }
 
-  /** Close the settings panel. */
+  /** Close the settings panel and return focus to the trigger button. */
   private _close() {
     this._panel.classList.remove("open");
     this._trigger.setAttribute("aria-expanded", "false");
+    this._trigger.focus();
   }
 
   /** Toggle open/closed state. */

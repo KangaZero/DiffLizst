@@ -117,16 +117,16 @@ template.innerHTML = `
     transition: background var(--duration-fast, 0.15s), border-color var(--duration-fast, 0.15s);
   }
   .trigger:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.1));
-    border-color: var(--accent-border, rgba(170,59,255,0.5));
+    background: var(--accent-bg, rgba(155,53,245,0.1));
+    border-color: var(--accent-border, rgba(155,53,245,0.5));
   }
   .trigger:focus-visible {
-    outline: 2px solid var(--accent, #aa3bff);
+    outline: 2px solid var(--accent, #9b35f5);
     outline-offset: 2px;
   }
   .trigger[aria-expanded="true"] {
-    background: var(--accent-bg, rgba(170,59,255,0.1));
-    border-color: var(--accent-border, rgba(170,59,255,0.5));
+    background: var(--accent-bg, rgba(155,53,245,0.1));
+    border-color: var(--accent-border, rgba(155,53,245,0.5));
   }
 
   .panel {
@@ -184,11 +184,11 @@ template.innerHTML = `
   summary::marker { display: none; }
 
   summary:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.07));
+    background: var(--accent-bg, rgba(155,53,245,0.07));
     color: var(--text-h, #08060d);
   }
   summary:focus-visible {
-    outline: 2px solid var(--accent, #aa3bff);
+    outline: 2px solid var(--accent, #9b35f5);
     outline-offset: -2px;
   }
 
@@ -217,10 +217,10 @@ template.innerHTML = `
     transition: background var(--duration-fast, 0.15s);
   }
   .sample-btn:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.07));
+    background: var(--accent-bg, rgba(155,53,245,0.07));
   }
   .sample-btn:focus-visible {
-    outline: 2px solid var(--accent, #aa3bff);
+    outline: 2px solid var(--accent, #9b35f5);
     outline-offset: -2px;
   }
 
@@ -244,7 +244,7 @@ template.innerHTML = `
     transition: background var(--duration-fast, 0.15s);
   }
   .upload-row:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.07));
+    background: var(--accent-bg, rgba(155,53,245,0.07));
   }
 
   input[type="file"] {
@@ -270,6 +270,16 @@ template.innerHTML = `
       min-height: 44px;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trigger,
+    summary,
+    .chevron,
+    .sample-btn,
+    .upload-row {
+      transition: none;
+    }
+  }
 </style>
 
 <button class="trigger" type="button" aria-label="Load score" aria-haspopup="true" aria-expanded="false">
@@ -277,7 +287,7 @@ template.innerHTML = `
   Load Score
 </button>
 
-<div class="panel" role="dialog" aria-label="Score selection">
+<div class="panel" role="dialog" aria-modal="true" aria-label="Score selection">
 <div class="section-label">Upload</div>
   <label class="upload-row">
     ${UPLOAD_ICON}
@@ -406,6 +416,7 @@ export class ScoreLoader extends HTMLElement {
     this.#open = false;
     this.#panel.classList.remove("open");
     this.#triggerBtn.setAttribute("aria-expanded", "false");
+    this.#triggerBtn.focus();
   }
 
   #dispatch(xml: string, filename: string): void {

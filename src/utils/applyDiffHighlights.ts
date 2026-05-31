@@ -160,6 +160,26 @@ function positionTooltip(tooltip: HTMLDivElement, e: MouseEvent): void {
 }
 
 /**
+ * Position the tooltip relative to an overlay's bounding rect center.
+ * Used for keyboard-triggered (focus) tooltip display when no MouseEvent
+ * is available.
+ */
+function positionTooltipByRect(tooltip: HTMLDivElement, rect: DOMRect): void {
+  const gap = 14;
+  const tipW = tooltip.offsetWidth || 320;
+  const tipH = tooltip.offsetHeight || 200;
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.bottom;
+  let x = cx - tipW / 2;
+  let y = cy + gap;
+  if (x + tipW > window.innerWidth) x = window.innerWidth - tipW - gap;
+  if (x < gap) x = gap;
+  if (y + tipH > window.innerHeight) y = rect.top - tipH - gap;
+  tooltip.style.left = `${x}px`;
+  tooltip.style.top = `${y}px`;
+}
+
+/**
  * Create a single diff overlay `<div>` positioned over `targetEl` inside
  * `container`, then wire up the hover tooltip behaviour.
  *
@@ -186,6 +206,11 @@ function createOverlay(
   // Carry the diff label so the next/prev nav can locate this overlay by
   // change identity rather than positional index (which shifts on page turn).
   overlay.dataset.diffLabel = diff.label;
+  // tabindex="0" makes overlays keyboard-reachable so focus/blur can show the
+  // tooltip — mirrors the mouseenter/mouseleave behaviour for keyboard users.
+  overlay.tabIndex = 0;
+  overlay.setAttribute("role", "button");
+  overlay.setAttribute("aria-label", `Diff: ${diff.label}`);
 
   // Convert viewport-relative rect to container-relative coordinates,
   // then add scroll offset so overlays stay correct after scrolling.
@@ -214,6 +239,17 @@ function createOverlay(
   });
   overlay.addEventListener("mousemove", (e) => positionTooltip(tooltip, e));
   overlay.addEventListener("mouseleave", () => {
+    tooltip.classList.remove("diff-tooltip--visible");
+  });
+
+  // Mirror mouse behaviour for keyboard users — focus shows the tooltip
+  // positioned relative to the overlay's bounding rect center.
+  overlay.addEventListener("focus", () => {
+    tooltip.innerHTML = html;
+    tooltip.classList.add("diff-tooltip--visible");
+    positionTooltipByRect(tooltip, overlay.getBoundingClientRect());
+  });
+  overlay.addEventListener("blur", () => {
     tooltip.classList.remove("diff-tooltip--visible");
   });
 
