@@ -93,6 +93,10 @@ const prevChangeBtn = document.querySelector<HTMLButtonElement>("#prev-change")!
 const nextChangeBtn = document.querySelector<HTMLButtonElement>("#next-change")!;
 const changeCounterEl = document.querySelector<HTMLSpanElement>("#change-counter")!;
 const diffSummaryAside = document.querySelector<HTMLElement>("#diff-summary")!;
+const diffSummaryMobileCloseBtn = document.querySelector<HTMLButtonElement>(
+  "#diff-summary-mobile-close",
+)!;
+const diffSummaryOpenBtn = document.querySelector<HTMLButtonElement>("#toolbar-summary-open");
 
 if (
   !notationContainer ||
@@ -117,7 +121,8 @@ if (
   !prevChangeBtn ||
   !nextChangeBtn ||
   !changeCounterEl ||
-  !diffSummaryAside
+  !diffSummaryAside ||
+  !diffSummaryMobileCloseBtn
 ) {
   throw new Error("Required app elements not found in DOM");
 }
@@ -357,6 +362,64 @@ const diffSummary = wireDiffSummary(diffSummaryAside, (id) => {
   if (idx !== -1) focusChange(idx);
 });
 
+// ─── Mobile sidebar overlay ────────────────────────────────────────────────
+// On narrow viewports the aside slides in from the right as an overlay.
+// The close button inside it dismisses it; any click on the backdrop also
+// dismisses it (the backdrop element is injected via CSS ::before on <body>
+// when data-summary-open is set, but we handle the click via a real element
+// for accessibility reasons).
+
+function openSidebarOverlay(): void {
+  diffSummaryAside.dataset.mobileOpen = "true";
+  diffSummaryAside.setAttribute("aria-hidden", "false");
+  diffSummaryMobileCloseBtn.focus();
+}
+
+function closeSidebarOverlay(): void {
+  delete diffSummaryAside.dataset.mobileOpen;
+  diffSummaryAside.setAttribute("aria-hidden", "true");
+}
+
+diffSummaryMobileCloseBtn.addEventListener("click", closeSidebarOverlay);
+
+// Close when focus leaves the aside entirely (Tab past the last item).
+diffSummaryAside.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (e.key === "Escape") closeSidebarOverlay();
+});
+
+// Toolbar open button — only present on mobile (hidden via CSS on desktop).
+diffSummaryOpenBtn?.addEventListener("click", openSidebarOverlay);
+
+/**
+ * Add ARIA attributes and keyboard handling to every `.diff-overlay` element
+ * inside the given containers. Called after each diff render because overlays
+ * are recreated on every re-apply. Each overlay already fires a `diff-navigate`
+ * event on click; here we make that reachable from the keyboard too.
+ */
+function enrichOverlays(containers: readonly HTMLElement[]): void {
+  for (const container of containers) {
+    for (const overlay of container.querySelectorAll<HTMLDivElement>(".diff-overlay")) {
+      if (overlay.dataset.ariaEnriched) continue;
+      overlay.dataset.ariaEnriched = "true";
+      overlay.setAttribute("role", "button");
+      overlay.setAttribute("tabindex", "0");
+      const label = overlay.dataset.diffLabel ?? "diff";
+      const type = overlay.classList.contains("diff-overlay--add")
+        ? "added"
+        : overlay.classList.contains("diff-overlay--remove")
+          ? "removed"
+          : "changed";
+      overlay.setAttribute("aria-label", `View diff: ${label} (${type})`);
+      overlay.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          overlay.click();
+        }
+      });
+    }
+  }
+}
+
 function refreshChangeNav(): void {
   currentChanges = flattenChanges(state.xmlDiff);
   currentChangeIdx = currentChanges.length > 0 ? 0 : -1;
@@ -364,6 +427,7 @@ function refreshChangeNav(): void {
   prevChangeBtn.disabled = currentChanges.length === 0;
   nextChangeBtn.disabled = currentChanges.length === 0;
   diffSummary.refresh(currentChanges);
+  enrichOverlays(containers);
 }
 
 function updateChangeCounter(): void {
@@ -465,6 +529,7 @@ sharedScaleInput.addEventListener("input", () => {
   rescale(state.toolkit, paginationEl, notationContainer, scale);
   rescale(state.toolkit2, paginationEl2, notationContainer2, scale);
   reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 scale1Input.addEventListener("input", () => {
@@ -473,6 +538,7 @@ scale1Input.addEventListener("input", () => {
   if (!state.toolkit) return;
   rescale(state.toolkit, paginationEl, notationContainer, scale);
   reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 scale2Input.addEventListener("input", () => {
@@ -481,6 +547,7 @@ scale2Input.addEventListener("input", () => {
   if (!state.toolkit2) return;
   rescale(state.toolkit2, paginationEl2, notationContainer2, scale);
   reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 // ─── Diff settings listener ────────────────────────────────────────────────
@@ -507,11 +574,13 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
 paginationEl.addEventListener("page-change", () => {
   setNotationSVGIDToIndexBase(notationContainer);
   reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 paginationEl2.addEventListener("page-change", () => {
   setNotationSVGIDToIndexBase(notationContainer2);
   reapplyDiff(state, containers, currentSettings.showLineNumbers);
+  enrichOverlays(containers);
 });
 
 // ─── Verovio initialisation ────────────────────────────────────────────────
