@@ -5,6 +5,9 @@
  * added/removed/changed entries, exposes filter chips for each type, and
  * persists its open/closed state across reloads.
  *
+ * Also renders a collapsible "Score statistics" section sourced from
+ * `computeScoreStats` — shown after the changes list.
+ *
  * Kept as a plain wiring module (not a Web Component) because every input
  * — the flat change list, the focus callback, the counts — already lives
  * in main.ts and would otherwise have to be funneled through attributes or
@@ -12,6 +15,7 @@
  */
 
 import { type ChangeEntry, countByChangeType } from "@/utils/changeIndex";
+import type { ScoreStats } from "@/utils/scoreStats";
 
 /** localStorage key that persists the open/closed state of the sidebar. */
 const STORAGE_KEY = "difflizst:diff-summary:open";
@@ -23,6 +27,11 @@ type Filter = (typeof FILTERS)[number];
 export type DiffSummaryHandle = {
   /** Re-render the list against the latest change entries. */
   refresh(entries: ChangeEntry[]): void;
+  /** Re-render the score statistics block. Pass null to clear a side. */
+  refreshStats(
+    left: { stats: ScoreStats; filename: string } | null,
+    right: { stats: ScoreStats; filename: string } | null,
+  ): void;
 };
 
 /** DOM nodes the wiring needs; pulled out so the caller doesn't query twice. */
@@ -98,6 +107,76 @@ function escapeText(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// ─── Score statistics rendering ────────────────────────────────────────────
+
+function statsRow(term: string, def: string): string {
+  return (
+    `<div class="score-stats-row">` +
+    `<dt class="score-stats-term">${escapeText(term)}</dt>` +
+    `<dd class="score-stats-def">${escapeText(def)}</dd>` +
+    `</div>`
+  );
+}
+
+function renderStatsColumn(stats: ScoreStats): string {
+  const rows: string[] = [
+    statsRow("Measures", String(stats.measureCount)),
+    statsRow("Notes", String(stats.noteCount)),
+    statsRow("Rests", String(stats.restCount)),
+    statsRow("Parts", String(stats.partCount)),
+  ];
+
+  if (stats.keySignatures.length > 0) {
+    rows.push(statsRow("Keys", stats.keySignatures.join(", ")));
+  }
+  if (stats.timeSignatures.length > 0) {
+    rows.push(statsRow("Time", stats.timeSignatures.join(", ")));
+  }
+  if (stats.tempoMarkings.length > 0) {
+    rows.push(statsRow("Tempo", stats.tempoMarkings.join(", ")));
+  }
+  if (stats.workTitle) {
+    rows.push(statsRow("Title", stats.workTitle));
+  }
+  if (stats.composer) {
+    rows.push(statsRow("Composer", stats.composer));
+  }
+
+  return `<dl class="score-stats-dl">${rows.join("")}</dl>`;
+}
+
+function renderStatsBlock(
+  left: { stats: ScoreStats; filename: string } | null,
+  right: { stats: ScoreStats; filename: string } | null,
+): string {
+  if (!left && !right) {
+    return `<p class="diff-summary-empty">Load a score to see statistics.</p>`;
+  }
+
+  const isTwoSided = left !== null && right !== null;
+
+  if (!isTwoSided) {
+    const side = (left ?? right)!;
+    return (
+      `<p class="score-stats-filename">${escapeText(side.filename)}</p>` +
+      renderStatsColumn(side.stats)
+    );
+  }
+
+  return (
+    `<div class="score-stats-side-by-side">` +
+    `<div class="score-stats-side">` +
+    `<p class="score-stats-filename score-stats-filename--left">${escapeText(left.filename)}</p>` +
+    renderStatsColumn(left.stats) +
+    `</div>` +
+    `<div class="score-stats-side">` +
+    `<p class="score-stats-filename score-stats-filename--right">${escapeText(right.filename)}</p>` +
+    renderStatsColumn(right.stats) +
+    `</div>` +
+    `</div>`
+  );
+}
+
 /**
  * Wire the diff summary sidebar.
  *
@@ -118,6 +197,19 @@ export function wireDiffSummary(
     list: aside.querySelector<HTMLOListElement>("#diff-summary-list")!,
     chips: aside.querySelectorAll<HTMLButtonElement>(".diff-summary-chip"),
   };
+
+  // ── Stats block (injected after the existing diff body) ─────────────────
+  const statsDetails = document.createElement("details");
+  statsDetails.className = "score-stats-details";
+  statsDetails.open = false;
+  statsDetails.innerHTML =
+    `<summary class="score-stats-summary">Score statistics</summary>` +
+    `<div id="diff-summary-stats" class="score-stats-body">` +
+    `<p class="diff-summary-empty">Load a score to see statistics.</p>` +
+    `</div>`;
+  aside.appendChild(statsDetails);
+
+  const statsBodyEl = statsDetails.querySelector<HTMLElement>("#diff-summary-stats")!;
 
   let lastEntries: ChangeEntry[] = [];
   const activeFilters = new Set<Filter>(FILTERS);
@@ -149,5 +241,23 @@ export function wireDiffSummary(
     renderList(entries, activeFilters, refs.list, onFocus);
   }
 
-  return { refresh };
+  function refreshStats(
+    left: { stats: ScoreStats; filename: string } | null,
+    right: { stats: ScoreStats; filename: string } | null,
+  ): void {
+    const leftOrRight = left ?? right;
+    const summaryText =
+      left && right
+        ? `Score statistics · ${left.filename} vs ${right.filename}`
+        : leftOrRight
+          ? `Score statistics · ${leftOrRight.filename}`
+          : "Score statistics";
+
+    const summaryEl = statsDetails.querySelector("summary");
+    if (summaryEl) summaryEl.textContent = summaryText;
+
+    statsBodyEl.innerHTML = renderStatsBlock(left, right);
+  }
+
+  return { refresh, refreshStats };
 }
