@@ -105,6 +105,7 @@ const diffSummaryMobileCloseBtn = document.querySelector<HTMLButtonElement>(
 )!;
 const diffSummaryOpenBtn = document.querySelector<HTMLButtonElement>("#toolbar-summary-open");
 const swapScoresBtn = document.querySelector<HTMLButtonElement>("#swap-scores")!;
+const printBtn = document.querySelector<HTMLButtonElement>("#print-btn");
 
 if (
   !notationContainer ||
@@ -559,6 +560,8 @@ swapScoresBtn.addEventListener("click", () => {
   if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
 });
 
+printBtn?.addEventListener("click", () => window.print());
+
 wireEditToggle(diffEditToggleBtn);
 
 wireGitDiffSplitToggle(
@@ -612,6 +615,9 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
   const isSplit = currentSettings.gitDiffOrientation === "split";
   gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(isSplit));
   gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
+  document.documentElement.dataset.palette = currentSettings.colorblindPalette
+    ? "colorblind"
+    : "default";
   runDiff(state, containers, currentSettings);
   refreshChangeNav();
   if (activeView === "monaco") {

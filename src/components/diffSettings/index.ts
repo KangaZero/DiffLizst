@@ -63,6 +63,9 @@ export type DiffSettingsValue = XMLDiffOptions & {
   /** When `true`, diffs each direct child tag within a measure individually
    *  instead of treating the whole measure as one unit. Default: `false`. */
   detailedDiff: boolean;
+  /** When `true`, switches the diff palette from red/green to blue/orange,
+   *  which is distinguishable for deuteranopia and protanopia. Default: `false`. */
+  colorblindPalette: boolean;
 };
 
 /** Default values shown when the component first renders. */
@@ -74,6 +77,7 @@ export const DEFAULT_SETTINGS: DiffSettingsValue = {
   showMiniMap: false,
   gitDiffOrientation: "split",
   detailedDiff: true,
+  colorblindPalette: false,
 };
 
 // Gear icon (Lucide `settings-2` path, MIT licensed)
@@ -297,6 +301,13 @@ template.innerHTML = `
   </div>
 <div class="row">
     <div class="label-wrap">
+      <label for="colorblind-palette">Colorblind-safe palette</label>
+      <span class="hint">Switches add/remove from green/red to blue/orange (deuteranopia + protanopia friendly)</span>
+    </div>
+    <input id="colorblind-palette" type="checkbox" ${DEFAULT_SETTINGS.colorblindPalette ? "checked" : ""} />
+  </div>
+<div class="row">
+    <div class="label-wrap">
       <label for="git-diff-orientation">Git Diff Orientation</label>
       <span class="hint">Choose the git diff orientation</span>
     </div>
@@ -328,6 +339,7 @@ export class DiffSettings extends HTMLElement {
   private _lineNosInput!: HTMLInputElement;
   private _miniMapInput!: HTMLInputElement;
   private _detailedDiffInput!: HTMLInputElement;
+  private _colorblindPaletteInput!: HTMLInputElement;
   private _gitDiffOrientationSelect!: HTMLSelectElement;
   private _algoSelect!: HTMLSelectElement;
 
@@ -351,6 +363,7 @@ export class DiffSettings extends HTMLElement {
     this._lineNosInput = mustQuery<HTMLInputElement>(root, "#show-line-nos");
     this._miniMapInput = mustQuery<HTMLInputElement>(root, "#show-mini-map");
     this._detailedDiffInput = mustQuery<HTMLInputElement>(root, "#detailed-diff");
+    this._colorblindPaletteInput = mustQuery<HTMLInputElement>(root, "#colorblind-palette");
     this._gitDiffOrientationSelect = mustQuery<HTMLSelectElement>(root, "#git-diff-orientation");
     this._algoSelect = mustQuery<HTMLSelectElement>(root, "#algorithm");
   }
@@ -363,6 +376,7 @@ export class DiffSettings extends HTMLElement {
     this._wsInput.addEventListener("change", () => this._emit());
     this._miniMapInput.addEventListener("change", () => this._emit());
     this._detailedDiffInput.addEventListener("change", () => this._emit());
+    this._colorblindPaletteInput.addEventListener("change", () => this._emit());
     this._algoSelect.addEventListener("change", () => this._emit());
     this._lineNosInput.addEventListener("change", () => this._emit());
     this._gitDiffOrientationSelect.addEventListener("change", () => this._emit());
@@ -388,6 +402,7 @@ export class DiffSettings extends HTMLElement {
     this._miniMapInput.checked = v.showMiniMap;
     this._gitDiffOrientationSelect.value = v.gitDiffOrientation;
     this._detailedDiffInput.checked = v.detailedDiff;
+    this._colorblindPaletteInput.checked = v.colorblindPalette;
   }
 
   /** Current snapshot of all settings. */
@@ -401,6 +416,7 @@ export class DiffSettings extends HTMLElement {
         .value as DiffSettingsValue["gitDiffOrientation"],
       showLineNumbers: this._lineNosInput.checked,
       detailedDiff: this._detailedDiffInput.checked,
+      colorblindPalette: this._colorblindPaletteInput.checked,
     };
   }
 

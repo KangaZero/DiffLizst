@@ -691,6 +691,55 @@ test.describe("Within-note diff tooltip summary", () => {
   });
 });
 
+// ─── Colorblind-safe palette toggle ───────────────────────────────────────
+
+test.describe("Colorblind-safe palette toggle", () => {
+  test("checking the colorblind toggle sets data-palette=colorblind and changes overlay background", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Record the computed background of the first add overlay before toggling.
+    const bgBefore = await page.evaluate(() => {
+      const overlay = document.querySelector<HTMLDivElement>(".diff-overlay--add");
+      if (!overlay) return "";
+      return getComputedStyle(overlay).backgroundColor;
+    });
+
+    // Open the settings panel and check the colorblind toggle.
+    await page.locator("diff-settings").evaluate((el: Element) => {
+      const shadow = el.shadowRoot;
+      if (!shadow) throw new Error("Shadow root not found");
+      const trigger = shadow.querySelector<HTMLButtonElement>(".trigger");
+      trigger?.click();
+    });
+
+    await page.locator("diff-settings").evaluate((el: Element) => {
+      const shadow = el.shadowRoot;
+      if (!shadow) throw new Error("Shadow root not found");
+      const checkbox = shadow.querySelector<HTMLInputElement>("#colorblind-palette");
+      if (!checkbox) throw new Error("Colorblind palette checkbox not found");
+      checkbox.click();
+    });
+
+    // data-palette must be "colorblind" after the settings-change event fires.
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "colorblind", {
+      timeout: 3_000,
+    });
+
+    // The computed background of an add overlay must differ from the default green.
+    const bgAfter = await page.evaluate(() => {
+      const overlay = document.querySelector<HTMLDivElement>(".diff-overlay--add");
+      if (!overlay) return "";
+      return getComputedStyle(overlay).backgroundColor;
+    });
+
+    expect(bgAfter).not.toBe(bgBefore);
+  });
+});
+
 // ─── Hover-link: overlay hover highlights Monaco lines ────────────────────
 
 test.describe("Hover-link bidirectional highlight", () => {

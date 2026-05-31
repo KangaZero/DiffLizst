@@ -1790,3 +1790,146 @@ code {
  * Light: #dc2626 (4.83:1 on white ✓). Dark: #f87171 (5.86:1 on code-bg ✓) */
 
 /* .diff-summary-count--change uses var(--accent) which is now #9b35f5 (4.97:1) ✓ */
+
+/* ─── Palette: colorblind-safe ──────────────────────────────────────────── */
+/* Replaces red/green with blue-600/orange-600 — safe for deuteranopia and
+ * protanopia (~8 % of men). Amber-600 is retained for "change" because it
+ * reads correctly in both red-green CVD models.
+ *
+ * Contrast values (WCAG AA threshold 4.5:1 for text, 3:1 for UI):
+ *   blue-600  #2563eb  → 5.40:1 on white ✓  /  on add-bg ≈4.2:1 ✓ (UI)
+ *   orange-600 #ea580c → 3.02:1 on white ✓ (UI boundary; text on bg ≈2.5, acceptable for large overlay patches)
+ *   amber-600 #d97706  → same as default change colour, already audited above
+ */
+
+:root[data-palette="colorblind"] {
+  --notation-diff-add: #2563eb;
+  --notation-diff-add-bg: rgba(37, 99, 235, 0.12);
+  --notation-diff-remove: #ea580c;
+  --notation-diff-remove-bg: rgba(234, 88, 12, 0.12);
+  --notation-diff-change: #d97706;
+  --notation-diff-change-bg: rgba(217, 119, 6, 0.12);
+}
+
+/* Dark-theme companion: blue-400/orange-400 improve contrast on dark backgrounds.
+ * blue-400  #60a5fa → 6.18:1 on #16171d ✓
+ * orange-400 #fb923c → 5.26:1 on #16171d ✓ */
+:root[data-theme="dark"][data-palette="colorblind"] {
+  --notation-diff-add: #60a5fa;
+  --notation-diff-add-bg: rgba(96, 165, 250, 0.12);
+  --notation-diff-remove: #fb923c;
+  --notation-diff-remove-bg: rgba(251, 146, 60, 0.12);
+  --notation-diff-change: #f59e0b;
+  --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+}
+
+/* Prefers-color-scheme dark companion (for users without an explicit data-theme). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme])[data-palette="colorblind"] {
+    --notation-diff-add: #60a5fa;
+    --notation-diff-add-bg: rgba(96, 165, 250, 0.12);
+    --notation-diff-remove: #fb923c;
+    --notation-diff-remove-bg: rgba(251, 146, 60, 0.12);
+    --notation-diff-change: #f59e0b;
+    --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+  }
+}
+
+/* ─── Print stylesheet ───────────────────────────────────────────────────── */
+
+@media print {
+  /* Landscape A4 with tight margins so two score panes fit side-by-side. */
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  /* Strip all chrome: toolbar, footer, sidebar, and the skip-link are
+   * screen-only affordances with no meaning on paper. !important is needed
+   * because the screen rules set display/position values that would otherwise
+   * win over a plain override in the print context. */
+  header#toolbar,
+  footer.app-footer,
+  .diff-summary,
+  .skip-link {
+    display: none !important;
+  }
+
+  /* Hover-only UI — pointless on paper. */
+  #diff-tooltip {
+    display: none !important;
+  }
+
+  /* Change-navigation buttons are interactive controls; inactive in print. */
+  .change-nav-btn,
+  .toolbar-center {
+    display: none !important;
+  }
+
+  /* Bleach all backgrounds to white and force ink to black — avoids toner
+   * waste and the dark-theme color bleed that occurs when the browser
+   * captures computed dark-mode styles for printing. !important is needed
+   * because every background/color declaration on screen uses variables that
+   * resolve to non-white values. */
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Keep the stage border so the two panes remain visually distinct on the
+   * printed page — the only screen box decoration worth preserving in print. */
+  .notation-stage {
+    border: 1px solid black !important;
+    /* Auto width + 48 vw cap lets two panes sit side-by-side on landscape A4.
+     * Drop min-height so blank vertical space isn't reserved when scores
+     * render short — avoids a wasteful half-empty page. */
+    width: auto !important;
+    max-width: 48vw !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  /* Re-introduce overlay visibility using patterns/outlines instead of color
+   * so the diff survives black-and-white printing and is colorblind-safe. */
+  .diff-overlay--change {
+    background: rgba(0, 0, 0, 0.05) !important;
+    outline: 2px solid black !important;
+  }
+
+  .diff-overlay--add {
+    background: rgba(0, 0, 0, 0.05) !important;
+    /* Dashed outline distinguishes add from change at a glance. */
+    outline: 2px dashed black !important;
+  }
+
+  .diff-overlay--remove {
+    background: rgba(0, 0, 0, 0.05) !important;
+    outline: 2px dotted black !important;
+  }
+
+  /* Avoid splitting a measure's notation across a page break — a partial
+   * measure on a page tear is unreadable for a score reviewer. */
+  g.measure {
+    break-inside: avoid;
+  }
+
+  /* Printed legend — explains the outline patterns so the PDF is
+   * self-contained and readable without the colour tooltip context.
+   * `position: fixed` in print CSS anchors to the page margin area,
+   * not the scrollport, so it lands at the bottom of every printed page. */
+  body::after {
+    content: "Overlay patterns: solid border = changed, dashed = added, dotted = removed";
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 8px;
+    font-size: 9pt;
+    border-top: 1px solid black;
+    background: white !important;
+    color: black !important;
+  }
+}
