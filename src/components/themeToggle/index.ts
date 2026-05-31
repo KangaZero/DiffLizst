@@ -1,5 +1,5 @@
-import styles from "./themeToggle.css?inline";
 import * as monaco from "monaco-editor";
+import styles from "./themeToggle.css?inline";
 
 type Theme = "light" | "dark";
 
@@ -61,8 +61,7 @@ export class ThemeToggle extends HTMLElement {
     this.iconSlot = this.shadowRoot!.querySelector("slot")!;
 
     const saved = localStorage.getItem(STORAGE_KEY);
-    const initial: Theme =
-      saved === "light" || saved === "dark" ? saved : this.getSystemTheme();
+    const initial: Theme = saved === "light" || saved === "dark" ? saved : this.getSystemTheme();
     this.apply(initial);
 
     this.button.addEventListener("click", this.handleClick);
@@ -78,11 +77,7 @@ export class ThemeToggle extends HTMLElement {
     return this.mediaQuery.matches ? "dark" : "light";
   }
 
-  public apply(
-    theme: Theme,
-    persist = false,
-    monacoEditor: typeof monaco = monaco,
-  ) {
+  public apply(theme: Theme, persist = false, monacoEditor: typeof monaco = monaco) {
     this.root.dataset.theme = theme;
     const isDark = theme === "dark";
     const label = isDark ? "Switch to light theme" : "Switch to dark theme";
@@ -91,8 +86,7 @@ export class ThemeToggle extends HTMLElement {
     this.button.setAttribute("aria-label", label);
     this.tooltip.textContent = label;
     this.iconSlot.innerHTML = isDark ? MOON_ICON : SUN_ICON;
-    if (monacoEditor)
-      monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs-light");
+    if (monacoEditor) monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs-light");
     if (persist) localStorage.setItem(STORAGE_KEY, theme);
   }
 

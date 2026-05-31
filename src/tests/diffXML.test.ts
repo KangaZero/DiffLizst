@@ -8,7 +8,7 @@
  * Run with: bun test src/tests/diffXML.test.ts
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { diffXML, type XMLDiffOptions } from "@/utils/diffXML";
 
 const DEFAULT_DIFF_OPTIONS: XMLDiffOptions = {
@@ -86,9 +86,13 @@ describe("diffXML", () => {
       expect(diff.changeType).toBe("change");
       expect(diff.label).toBe("credit 0");
       // Must have at least one remove line with the old text
-      expect(diff.lines.some(l => l.type === "remove" && l.content.includes("Original Title"))).toBe(true);
+      expect(
+        diff.lines.some((l) => l.type === "remove" && l.content.includes("Original Title")),
+      ).toBe(true);
       // And at least one add line with the new text
-      expect(diff.lines.some(l => l.type === "add" && l.content.includes("Changed Title"))).toBe(true);
+      expect(diff.lines.some((l) => l.type === "add" && l.content.includes("Changed Title"))).toBe(
+        true,
+      );
     });
   });
 
@@ -141,7 +145,7 @@ describe("diffXML", () => {
       const result = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, contextLines: 0 });
 
       const diff = result.measures.get(1)!;
-      const contextLines = diff.lines.filter(l => l.type === "context");
+      const contextLines = diff.lines.filter((l) => l.type === "context");
       expect(contextLines.length).toBe(0);
     });
 
@@ -150,10 +154,10 @@ describe("diffXML", () => {
       const xml2 = makeXML({ measure1Note: "<step>D</step><octave>4</octave>" });
 
       const narrow = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, contextLines: 0 });
-      const wide   = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, contextLines: 5 });
+      const wide = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, contextLines: 5 });
 
-      const narrowCtx = narrow.measures.get(1)!.lines.filter(l => l.type === "context").length;
-      const wideCtx   = wide.measures.get(1)!.lines.filter(l => l.type === "context").length;
+      const narrowCtx = narrow.measures.get(1)!.lines.filter((l) => l.type === "context").length;
+      const wideCtx = wide.measures.get(1)!.lines.filter((l) => l.type === "context").length;
       expect(wideCtx).toBeGreaterThan(narrowCtx);
     });
   });
@@ -188,10 +192,10 @@ describe("diffXML", () => {
         `\n${indent}<note><pitch><step>C</step></pitch></note>` +
         `\n</measure></part></score-partwise>`;
 
-      const xml1 = base("  ");   // 2-space indent
+      const xml1 = base("  "); // 2-space indent
       const xml2 = base("    "); // 4-space indent
 
-      const withWS    = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, ignoreWhitespace: false });
+      const withWS = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, ignoreWhitespace: false });
       const withoutWS = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, ignoreWhitespace: true });
 
       // With whitespace sensitivity on: a difference should be detected

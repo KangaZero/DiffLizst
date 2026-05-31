@@ -1,5 +1,5 @@
 import type { DiffSettingsValue } from "@/components/diffSettings";
-import type { ElementDiff, DiffLine, XMLDiffResult } from "@/utils/diffXML";
+import type { DiffLine, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 
 // ─── HTML helpers ────────────────────────────────────────────────────────────
 
@@ -38,10 +38,7 @@ export function splitCellHTML(
 /**
  * Render one element diff hunk as a unified (single-column) block.
  */
-export function unifiedHunkHTML(
-  diff: ElementDiff,
-  showLineNumbers: boolean,
-): string {
+export function unifiedHunkHTML(diff: ElementDiff, showLineNumbers: boolean): string {
   const linesHTML = diff.lines
     .map((l) => {
       const glyph = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
@@ -68,10 +65,7 @@ export function unifiedHunkHTML(
  * insertion appear on the same row. Unpaired removes get an empty right cell;
  * unpaired adds get an empty left cell.
  */
-export function splitHunkHTML(
-  diff: ElementDiff,
-  showLineNumbers: boolean,
-): string {
+export function splitHunkHTML(diff: ElementDiff, showLineNumbers: boolean): string {
   type SplitRow =
     | { kind: "context"; line: DiffLine }
     | { kind: "change"; remove?: DiffLine; add?: DiffLine };
@@ -88,8 +82,7 @@ export function splitHunkHTML(
       const adds: DiffLine[] = [];
       while (i < diff.lines.length && diff.lines[i].type === "remove")
         removes.push(diff.lines[i++]);
-      while (i < diff.lines.length && diff.lines[i].type === "add")
-        adds.push(diff.lines[i++]);
+      while (i < diff.lines.length && diff.lines[i].type === "add") adds.push(diff.lines[i++]);
       const len = Math.max(removes.length, adds.length);
       for (let j = 0; j < len; j++) {
         rows.push({ kind: "change", remove: removes[j], add: adds[j] });
@@ -138,10 +131,7 @@ export function renderGitDiffPage(
   settings: DiffSettingsValue,
 ): void {
   const hasChanges =
-    xmlDiff &&
-    (xmlDiff.measures.size > 0 ||
-      xmlDiff.credits.size > 0 ||
-      xmlDiff.children.size > 0);
+    xmlDiff && (xmlDiff.measures.size > 0 || xmlDiff.credits.size > 0 || xmlDiff.children.size > 0);
 
   if (!xmlDiff || !hasChanges) {
     hunksEl.innerHTML = `<p class="diff-page-empty">No differences found between the two scores.</p>`;
@@ -192,8 +182,7 @@ export function wireGitDiffSplitToggle(
 ): void {
   btn.addEventListener("click", () => {
     const current = getState();
-    const next =
-      current.gitDiffOrientation === "split" ? "unified" : "split";
+    const next = current.gitDiffOrientation === "split" ? "unified" : "split";
     const updated: DiffSettingsValue = {
       ...current,
       gitDiffOrientation: next,

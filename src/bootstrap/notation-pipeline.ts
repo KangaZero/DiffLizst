@@ -1,18 +1,14 @@
-import { type VerovioOptions, toolkit as Toolkit } from "verovio";
-import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
-import { getTotalPageCount } from "@/utils/getTotalPageCount";
-import {
-  diffXML,
-  type XMLDiffResult,
-  type ChildDiffKey,
-} from "@/utils/diffXML";
-import {
-  applyDiffHighlights,
-  buildMeasureIdMap,
-  buildChildIdMap,
-} from "@/utils/applyDiffHighlights";
+import type { toolkit as Toolkit, VerovioOptions } from "verovio";
 import type { DiffSettingsValue } from "@/components/diffSettings";
 import type { Pages } from "@/components/pages";
+import {
+  applyDiffHighlights,
+  buildChildIdMap,
+  buildMeasureIdMap,
+} from "@/utils/applyDiffHighlights";
+import { type ChildDiffKey, diffXML, type XMLDiffResult } from "@/utils/diffXML";
+import { getTotalPageCount } from "@/utils/getTotalPageCount";
+import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -37,10 +33,7 @@ export interface NotationState {
 /**
  * Update a scale `<output>` element's displayed value.
  */
-export function updateScaleOutput(
-  output: HTMLOutputElement,
-  scale: number,
-): void {
+export function updateScaleOutput(output: HTMLOutputElement, scale: number): void {
   output.value = `${scale}%`;
   output.textContent = `${scale}%`;
 }
@@ -127,8 +120,10 @@ export function renderNotation(
   container: HTMLDivElement,
   scale: number,
 ): void {
-  if (!tk || !xmlFile)
-    return console.warn("renderNotation: missing toolkit or XML");
+  if (!tk || !xmlFile) {
+    console.warn("renderNotation: missing toolkit or XML");
+    return;
+  }
 
   const options: VerovioOptions = {
     adjustPageHeight: true,

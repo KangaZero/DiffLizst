@@ -26,10 +26,7 @@ let diffEditorEditable = false;
  * Minimal generic debounce — waits `ms` milliseconds of silence before
  * calling `fn`. Resets the timer on every new call.
  */
-function debounce<T extends unknown[]>(
-  fn: (...args: T) => void,
-  ms: number,
-): (...args: T) => void {
+function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number): (...args: T) => void {
   let timer: ReturnType<typeof setTimeout>;
   return (...args: T) => {
     clearTimeout(timer);
@@ -45,9 +42,7 @@ function debounce<T extends unknown[]>(
  * theme-toggle element.
  */
 export function getMonacoTheme(): string {
-  return (document.documentElement.dataset.theme ?? "light") === "dark"
-    ? "vs-dark"
-    : "vs-light";
+  return (document.documentElement.dataset.theme ?? "light") === "dark" ? "vs-dark" : "vs-light";
 }
 
 /**
@@ -67,9 +62,7 @@ export function getMonacoDiffEditor(): monaco.editor.IStandaloneDiffEditor | nul
 export function wireEditToggle(btn: HTMLButtonElement): void {
   btn.addEventListener("click", () => {
     diffEditorEditable = !diffEditorEditable;
-    monacoDiffEditor
-      ?.getModifiedEditor()
-      .updateOptions({ readOnly: !diffEditorEditable });
+    monacoDiffEditor?.getModifiedEditor().updateOptions({ readOnly: !diffEditorEditable });
     btn.setAttribute("aria-pressed", String(diffEditorEditable));
     btn.textContent = diffEditorEditable ? "Read-only" : "Edit";
   });
@@ -85,9 +78,7 @@ export function wireEditToggle(btn: HTMLButtonElement): void {
  * 2. Calls `callbacks.runDiff()` so SVG overlays and git diff reflect the change.
  * 3. Invalid XML during mid-edit is silently ignored inside rerenderScore2.
  */
-export function buildSyncFromMonaco(
-  callbacks: MonacoCallbacks,
-): () => void {
+export function buildSyncFromMonaco(callbacks: MonacoCallbacks): () => void {
   return debounce(() => {
     if (!monacoDiffEditor) return;
     const xml = monacoDiffEditor.getModifiedEditor().getValue();

@@ -8,9 +8,9 @@
  */
 
 import {
-  getMusicXMLDiff,
-  getEnhancedMusicXMLDiff,
   formatDiffForTerminal,
+  getEnhancedMusicXMLDiff,
+  getMusicXMLDiff,
   getMusicXMLDiffStats,
 } from "./MXMLDiffParser";
 

@@ -40,9 +40,7 @@ export type ElementDiff = {
  * - `"${measureNum}-${tagName}-${groupIdx}"` — child of a numbered measure
  * - `"root-${tagName}-${groupIdx}"` — top-level score element
  */
-export type ChildDiffKey =
-  | `${number}-${string}-${number}`
-  | `root-${string}-${number}`;
+export type ChildDiffKey = `${number}-${string}-${number}` | `root-${string}-${number}`;
 
 /**
  * Top-level result returned by {@link diffXML}.
@@ -105,15 +103,11 @@ export type XMLDiffOptions = {
 function buildLCSTable(a: string[], b: string[]): number[][] {
   const m = a.length;
   const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    new Array(n + 1).fill(0),
-  );
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       dp[i][j] =
-        a[i - 1] === b[j - 1]
-          ? dp[i - 1][j - 1] + 1
-          : Math.max(dp[i - 1][j], dp[i][j - 1]);
+        a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
     }
   }
   return dp;
@@ -180,11 +174,7 @@ function trimContext(lines: DiffLine[], context: number): DiffLine[] {
   // Expand each changed index by ±context
   const keep = new Set<number>();
   for (const idx of changedIndices) {
-    for (
-      let k = Math.max(0, idx - context);
-      k <= Math.min(lines.length - 1, idx + context);
-      k++
-    ) {
+    for (let k = Math.max(0, idx - context); k <= Math.min(lines.length - 1, idx + context); k++) {
       keep.add(k);
     }
   }
@@ -228,11 +218,7 @@ function normaliseLine(line: string, opts: XMLDiffOptions): string {
  * The 0-based index is chosen so callers can do `offset + (1-based element line)`
  * to get the correct 1-based file line number.
  */
-function findLineOffset(
-  xml: string,
-  searchStr: string,
-  occurrence = 0,
-): number {
+function findLineOffset(xml: string, searchStr: string, occurrence = 0): number {
   let count = 0;
   let pos = 0;
   while (true) {
@@ -260,12 +246,7 @@ function findLineOffset(
  * @param occurrence 0-based index when multiple elements share the same open pattern.
  * @returns The raw substring from the opening tag through its closing tag, or `""` if not found.
  */
-function sliceElement(
-  xml: string,
-  openSearch: string,
-  closeTag: string,
-  occurrence = 0,
-): string {
+function sliceElement(xml: string, openSearch: string, closeTag: string, occurrence = 0): string {
   let count = 0;
   let pos = 0;
   while (true) {
@@ -453,11 +434,7 @@ function diffChildrenByTag(
  * }
  * ```
  */
-export function diffXML(
-  xml1: string,
-  xml2: string,
-  opts: XMLDiffOptions,
-): XMLDiffResult {
+export function diffXML(xml1: string, xml2: string, opts: XMLDiffOptions): XMLDiffResult {
   const parser = new DOMParser();
   const doc1 = parser.parseFromString(xml1, "application/xml");
   const doc2 = parser.parseFromString(xml2, "application/xml");
@@ -472,16 +449,12 @@ export function diffXML(
   const measureMap1 = new Map<number, Element>();
   const measureMap2 = new Map<number, Element>();
 
-  doc1
-    .querySelectorAll("measure")
-    .forEach((m) =>
-      measureMap1.set(parseInt(m.getAttribute("number") ?? "0", 10), m),
-    );
-  doc2
-    .querySelectorAll("measure")
-    .forEach((m) =>
-      measureMap2.set(parseInt(m.getAttribute("number") ?? "0", 10), m),
-    );
+  for (const m of doc1.querySelectorAll("measure")) {
+    measureMap1.set(Number.parseInt(m.getAttribute("number") ?? "0", 10), m);
+  }
+  for (const m of doc2.querySelectorAll("measure")) {
+    measureMap2.set(Number.parseInt(m.getAttribute("number") ?? "0", 10), m);
+  }
 
   for (const num of new Set([...measureMap1.keys(), ...measureMap2.keys()])) {
     const m1 = measureMap1.get(num);
@@ -502,8 +475,12 @@ export function diffXML(
     } else if (m1 && m2) {
       const o1 = findLineOffset(xml1, `<measure number="${num}"`);
       const o2 = findLineOffset(xml2, `<measure number="${num}"`);
-      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, `<measure number="${num}"`, "</measure>");
-      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, `<measure number="${num}"`, "</measure>");
+      const r1 = opts.ignoreWhitespace
+        ? undefined
+        : sliceElement(xml1, `<measure number="${num}"`, "</measure>");
+      const r2 = opts.ignoreWhitespace
+        ? undefined
+        : sliceElement(xml2, `<measure number="${num}"`, "</measure>");
       const d = elementDiff(m1, m2, `measure ${num}`, opts, o1, o2, r1, r2);
       if (d) measures.set(num, d);
     } else if (m1) {
@@ -550,8 +527,12 @@ export function diffXML(
     if (p1 && p2) {
       const o1 = findLineOffset(xml1, "<part-list", i);
       const o2 = findLineOffset(xml2, "<part-list", i);
-      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, "<part-list", "</part-list>", i);
-      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, "<part-list", "</part-list>", i);
+      const r1 = opts.ignoreWhitespace
+        ? undefined
+        : sliceElement(xml1, "<part-list", "</part-list>", i);
+      const r2 = opts.ignoreWhitespace
+        ? undefined
+        : sliceElement(xml2, "<part-list", "</part-list>", i);
       const d = elementDiff(p1, p2, `part-list ${i}`, opts, o1, o2, r1, r2);
       if (d) partLists.set(i, d);
     } else if (p1) {

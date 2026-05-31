@@ -83,10 +83,7 @@ function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
     .map((l) => {
       const prefix = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
       const cls = `diff-line-${l.type}`;
-      const escaped = l.content
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const escaped = l.content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       if (showLineNumbers) {
         const oldNo = l.oldLineNo != null ? String(l.oldLineNo) : "";
         const newNo = l.newLineNo != null ? String(l.newLineNo) : "";
@@ -264,7 +261,7 @@ export function buildMeasureIdMap(toolkit: {
     doc.querySelectorAll("measure").forEach((m, idx) => {
       const id = m.getAttribute("xml:id");
       // MEI 'n' = measure number; fall back to 1-based document index
-      const n = parseInt(m.getAttribute("n") ?? String(idx + 1), 10);
+      const n = Number.parseInt(m.getAttribute("n") ?? String(idx + 1), 10);
       if (id) map.set(id, n);
     });
   } catch (err) {
@@ -308,9 +305,11 @@ export function applyDiffHighlights(
   showLineNumbers = true,
 ): void {
   // Remove stale overlays from the previous render
-  [container1, container2].forEach((c) =>
-    c.querySelectorAll(".diff-overlay").forEach((el) => el.remove()),
-  );
+  for (const c of [container1, container2]) {
+    for (const el of c.querySelectorAll(".diff-overlay")) {
+      el.remove();
+    }
+  }
 
   // ── Measures ──────────────────────────────────────────────────────────
   // Iterate only the g.measure elements present in the current page's SVG.
@@ -341,12 +340,8 @@ export function applyDiffHighlights(
   // texts arrays are empty, making the loop below a safe no-op.
   const pgHead1 = container1.querySelector("g.pgHead");
   const pgHead2 = container2.querySelector("g.pgHead");
-  const texts1 = pgHead1
-    ? Array.from(pgHead1.querySelectorAll<SVGTextElement>("text"))
-    : [];
-  const texts2 = pgHead2
-    ? Array.from(pgHead2.querySelectorAll<SVGTextElement>("text"))
-    : [];
+  const texts1 = pgHead1 ? Array.from(pgHead1.querySelectorAll<SVGTextElement>("text")) : [];
+  const texts2 = pgHead2 ? Array.from(pgHead2.querySelectorAll<SVGTextElement>("text")) : [];
 
   for (const [idx, d] of diff.credits.entries()) {
     const t1 = texts1[idx];
@@ -376,14 +371,10 @@ export function applyDiffHighlights(
     const it1 = instrumentText1[idx];
     const it2 = instrumentText2[idx];
     if (it1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(
-        createOverlay(it1, container1, d, showLineNumbers),
-      );
+      container1.appendChild(createOverlay(it1, container1, d, showLineNumbers));
     }
     if (it2 && (d.changeType === "change" || d.changeType === "add")) {
-      container2.appendChild(
-        createOverlay(it2, container2, d, showLineNumbers),
-      );
+      container2.appendChild(createOverlay(it2, container2, d, showLineNumbers));
     }
   }
   // ── Detailed child diffs (note / rest level) ───────────────────────────

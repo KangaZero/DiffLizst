@@ -1,4 +1,19 @@
 import type { XMLDiffOptions } from "@/utils/diffXML";
+
+/**
+ * Helper: querySelector inside a shadow root with a typed, throwing guard.
+ *
+ * The Web Component template is built from a static `HTMLTemplateElement`, so
+ * any missing selector is a programmer error caught at first run rather than a
+ * legitimate runtime condition. Throwing here lets us drop non-null assertions
+ * without sprinkling `if (!x) throw` everywhere.
+ */
+function mustQuery<T extends Element>(root: ShadowRoot, selector: string): T {
+  const el = root.querySelector<T>(selector);
+  if (!el) throw new Error(`<diff-settings> template is missing selector "${selector}"`);
+  return el;
+}
+
 /**
  * `<diff-settings>` Web Component
  *
@@ -297,21 +312,21 @@ export class DiffSettings extends HTMLElement {
 
   constructor() {
     super();
-    this.attachShadow({ mode: "open" });
-    if (!this.shadowRoot) console.error("No shadowRoot detected");
-    this.shadowRoot?.appendChild(template.content.cloneNode(true));
+    const root = this.attachShadow({ mode: "open" });
+    root.appendChild(template.content.cloneNode(true));
 
-    this._trigger = this.shadowRoot?.querySelector(".trigger")!;
-    this._panel = this.shadowRoot?.querySelector(".panel")!;
-    this._ctxInput = this.shadowRoot?.querySelector("#ctx-lines")!;
-    this._wsInput = this.shadowRoot?.querySelector("#ignore-ws")!;
-    this._lineNosInput = this.shadowRoot?.querySelector("#show-line-nos")!;
-    this._miniMapInput = this.shadowRoot?.querySelector("#show-mini-map")!;
-    this._detailedDiffInput = this.shadowRoot?.querySelector("#detailed-diff")!;
-    this._gitDiffOrientationSelect = this.shadowRoot?.querySelector(
-      "#git-diff-orientation",
-    )!;
-    this._algoSelect = this.shadowRoot?.querySelector("#algorithm")!;
+    // `querySelector` returns `T | null`. We rely on the template producing every
+    // selector — a missing element is a programming error, not a runtime
+    // condition, so we fail loud-and-early with a single named-element guard.
+    this._trigger = mustQuery<HTMLButtonElement>(root, ".trigger");
+    this._panel = mustQuery<HTMLDivElement>(root, ".panel");
+    this._ctxInput = mustQuery<HTMLInputElement>(root, "#ctx-lines");
+    this._wsInput = mustQuery<HTMLInputElement>(root, "#ignore-ws");
+    this._lineNosInput = mustQuery<HTMLInputElement>(root, "#show-line-nos");
+    this._miniMapInput = mustQuery<HTMLInputElement>(root, "#show-mini-map");
+    this._detailedDiffInput = mustQuery<HTMLInputElement>(root, "#detailed-diff");
+    this._gitDiffOrientationSelect = mustQuery<HTMLSelectElement>(root, "#git-diff-orientation");
+    this._algoSelect = mustQuery<HTMLSelectElement>(root, "#algorithm");
   }
 
   connectedCallback() {
@@ -324,9 +339,7 @@ export class DiffSettings extends HTMLElement {
     this._detailedDiffInput.addEventListener("change", () => this._emit());
     this._algoSelect.addEventListener("change", () => this._emit());
     this._lineNosInput.addEventListener("change", () => this._emit());
-    this._gitDiffOrientationSelect.addEventListener("change", () =>
-      this._emit(),
-    );
+    this._gitDiffOrientationSelect.addEventListener("change", () => this._emit());
     // Close when user clicks outside the component
     document.addEventListener("click", this._onOutsideClick);
 
@@ -354,10 +367,7 @@ export class DiffSettings extends HTMLElement {
   /** Current snapshot of all settings. */
   get value(): DiffSettingsValue {
     return {
-      contextLines: Math.max(
-        0,
-        Math.min(10, Number(this._ctxInput.value) || 0),
-      ),
+      contextLines: Math.max(0, Math.min(10, Number(this._ctxInput.value) || 0)),
       ignoreWhitespace: this._wsInput.checked,
       algorithm: this._algoSelect.value as DiffSettingsValue["algorithm"],
       showMiniMap: this._miniMapInput.checked,

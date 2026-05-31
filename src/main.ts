@@ -4,29 +4,33 @@ import "./components/themeToggle";
 import "./components/pages";
 import "./components/diffSettings";
 import "./components/scoreLoader";
-import type {
-  ScoreLoader,
-  ScoreLoaderSample,
-  ScoreLoadDetail,
-  Composer,
-  MXML,
-} from "./components/scoreLoader";
-import type { Pages } from "./components/pages";
-import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
-import { buildMeasureIdMap, buildChildIdMap } from "@/utils/applyDiffHighlights";
-import type { ChildDiffKey, XMLDiffResult, ElementDiff } from "@/utils/diffXML";
-import { DEFAULT_SETTINGS, type DiffSettingsValue } from "./components/diffSettings";
-import {
-  renderNotation, rescale, updateScaleOutput,
-  reloadScore, runDiff, reapplyDiff,
-  type NotationState,
-} from "@/bootstrap/notation-pipeline";
-import { renderCodeDiffPage, wireEditToggle, getMonacoDiffEditor } from "@/bootstrap/monaco-page";
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import type { toolkit as Toolkit } from "verovio";
+import * as verovio from "verovio";
 import { renderGitDiffPage, wireGitDiffSplitToggle } from "@/bootstrap/git-diff-page";
 import { APP_HTML } from "@/bootstrap/html-shell";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import * as verovio from "verovio";
-import { toolkit as Toolkit } from "verovio";
+import { getMonacoDiffEditor, renderCodeDiffPage, wireEditToggle } from "@/bootstrap/monaco-page";
+import {
+  type NotationState,
+  reapplyDiff,
+  reloadScore,
+  renderNotation,
+  rescale,
+  runDiff,
+  updateScaleOutput,
+} from "@/bootstrap/notation-pipeline";
+import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
+import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
+import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
+import { DEFAULT_SETTINGS, type DiffSettingsValue } from "./components/diffSettings";
+import type { Pages } from "./components/pages";
+import type {
+  Composer,
+  MXML,
+  ScoreLoadDetail,
+  ScoreLoader,
+  ScoreLoaderSample,
+} from "./components/scoreLoader";
 
 self.MonacoEnvironment = {
   getWorker(_id: string, _label: string): Worker {
@@ -41,17 +45,17 @@ const _scoreModules = import.meta.glob<string>("./scores/**/*.xml", {
   eager: true,
 });
 
-const SAMPLE_SCORES: ScoreLoaderSample[] = Object.entries(_scoreModules).map(
-  ([path, xml]) => {
-    const segments = path.split("/");
-    const composer = segments[segments.length - 2] as Composer;
-    const label = segments[segments.length - 1].replace(/\.xml$/i, "");
-    return {
-      id: `${composer}-${label}` as `${Composer}-${string}`,
-      composer, label, xml: xml as MXML,
-    };
-  },
-);
+const SAMPLE_SCORES: ScoreLoaderSample[] = Object.entries(_scoreModules).map(([path, xml]) => {
+  const segments = path.split("/");
+  const composer = segments[segments.length - 2] as Composer;
+  const label = segments[segments.length - 1].replace(/\.xml$/i, "");
+  return {
+    id: `${composer}-${label}` as `${Composer}-${string}`,
+    composer,
+    label,
+    xml: xml as MXML,
+  };
+});
 
 // ─── DOM bootstrap ────────────────────────────────────────────────────────
 
@@ -83,11 +87,25 @@ const diffEditorContainer = document.querySelector<HTMLElement>("#diff-editor-co
 const diffEditToggleBtn = document.querySelector<HTMLButtonElement>("#diff-edit-toggle")!;
 
 if (
-  !notationContainer || !notationContainer2 || !notationPanel || !notationPanel2 ||
-  !sharedScaleInput || !sharedScaleOutput || !scale1Input || !scale1Output ||
-  !scale2Input || !scale2Output || !diffSettingsEl || !viewToggleBtn ||
-  !gitDiffToggleBtn || !diffPageEl || !gitDiffPageEl || !gitDiffHunksEl ||
-  !gitDiffSplitToggleBtn || !diffEditorContainer || !diffEditToggleBtn
+  !notationContainer ||
+  !notationContainer2 ||
+  !notationPanel ||
+  !notationPanel2 ||
+  !sharedScaleInput ||
+  !sharedScaleOutput ||
+  !scale1Input ||
+  !scale1Output ||
+  !scale2Input ||
+  !scale2Output ||
+  !diffSettingsEl ||
+  !viewToggleBtn ||
+  !gitDiffToggleBtn ||
+  !diffPageEl ||
+  !gitDiffPageEl ||
+  !gitDiffHunksEl ||
+  !gitDiffSplitToggleBtn ||
+  !diffEditorContainer ||
+  !diffEditToggleBtn
 ) {
   throw new Error("Required app elements not found in DOM");
 }
@@ -170,11 +188,19 @@ function switchView(target: View): void {
 
   viewToggleBtn.setAttribute("aria-pressed", String(isMonaco));
   gitDiffToggleBtn.setAttribute("aria-pressed", String(isGitDiff));
-  notationSections.forEach((el) => { if (el) el.style.display = isNotation ? "" : "none"; });
+  notationSections.forEach((el) => {
+    if (el) el.style.display = isNotation ? "" : "none";
+  });
 
   if (isMonaco) {
     diffPageEl.classList.add("visible");
-    renderCodeDiffPage(state.originalXML, state.xMLToCompare, diffEditorContainer, currentSettings, monacoCallbacks);
+    renderCodeDiffPage(
+      state.originalXML,
+      state.xMLToCompare,
+      diffEditorContainer,
+      currentSettings,
+      monacoCallbacks,
+    );
     requestAnimationFrame(() => getMonacoDiffEditor()?.layout());
   } else {
     diffPageEl.classList.remove("visible");
@@ -201,9 +227,8 @@ function labelToSearchTerm(label: string): string {
 function navigateMonacoToDiff(diff: ElementDiff): void {
   const editor = getMonacoDiffEditor();
   if (!editor) return;
-  const pane = diff.changeType === "remove"
-    ? editor.getOriginalEditor()
-    : editor.getModifiedEditor();
+  const pane =
+    diff.changeType === "remove" ? editor.getOriginalEditor() : editor.getModifiedEditor();
   const model = pane.getModel();
   if (!model) return;
   const matches = model.findMatches(labelToSearchTerm(diff.label), true, false, false, null, false);
@@ -235,16 +260,28 @@ function makeModelUpdateCb(): (side: 1 | 2, xml: string) => void {
 function makeFilenameCb(): (side: 1 | 2, name: string) => void {
   return (side, name) => {
     const cls = side === 1 ? ".diff-file-old" : ".diff-file-new";
-    document.querySelectorAll<HTMLElement>(cls).forEach((el) => { el.textContent = name; });
+    document.querySelectorAll<HTMLElement>(cls).forEach((el) => {
+      el.textContent = name;
+    });
   };
 }
 
 function wireScoreLoader(el: ScoreLoader, which: 1 | 2): void {
   el.addEventListener("score-load", (e) => {
     const { xml, filename } = (e as CustomEvent<ScoreLoadDetail>).detail;
-    reloadScore(which, xml, filename, state, containers, [paginationEl, paginationEl2], sharedScaleInput, currentSettings, makeModelUpdateCb(), makeFilenameCb());
-    if (activeView === "gitdiff")
-      renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
+    reloadScore(
+      which,
+      xml,
+      filename,
+      state,
+      containers,
+      [paginationEl, paginationEl2],
+      sharedScaleInput,
+      currentSettings,
+      makeModelUpdateCb(),
+      makeFilenameCb(),
+    );
+    if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
   });
 }
 
@@ -259,7 +296,9 @@ wireGitDiffSplitToggle(
   gitDiffSplitToggleBtn,
   diffSettingsEl,
   () => currentSettings,
-  (s) => { currentSettings = s; },
+  (s) => {
+    currentSettings = s;
+  },
   () => renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings),
 );
 
@@ -303,7 +342,13 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
   gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
   runDiff(state, containers, currentSettings);
   if (activeView === "monaco")
-    renderCodeDiffPage(state.originalXML, state.xMLToCompare, diffEditorContainer, currentSettings, monacoCallbacks);
+    renderCodeDiffPage(
+      state.originalXML,
+      state.xMLToCompare,
+      diffEditorContainer,
+      currentSettings,
+      monacoCallbacks,
+    );
 });
 
 // ─── Page-change listeners ─────────────────────────────────────────────────

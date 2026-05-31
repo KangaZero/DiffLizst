@@ -10,7 +10,7 @@ export interface DiffHunk {
 }
 
 export interface DiffLine {
-  type: 'add' | 'remove' | 'context' | 'header' | 'parentOfContext';
+  type: "add" | "remove" | "context" | "header" | "parentOfContext";
   content: string;
   lineNumber?: number;
 }
@@ -25,12 +25,12 @@ export interface ParsedDiff {
  */
 const CONTEXT_PARENTS = [
   `measure`,
-  'part-list',
+  "part-list",
   // 'score-part',
-  'credit',
-  'defaults',
-  'identification',
-  'attributes',
+  "credit",
+  "defaults",
+  "identification",
+  "attributes",
   // 'note',
   // 'direction',
   // 'barline',
@@ -41,7 +41,7 @@ const CONTEXT_PARENTS = [
  */
 export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
   const files: ParsedDiff[] = [];
-  const lines = diffOutput.split('\n');
+  const lines = diffOutput.split("\n");
 
   let currentFile: ParsedDiff | null = null;
   let currentHunk: DiffHunk | null = null;
@@ -50,11 +50,11 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
     const line = lines[i];
 
     // File header: --- a/file.xml or +++ b/file.xml
-    if (line.startsWith('---') || line.startsWith('+++')) {
+    if (line.startsWith("---") || line.startsWith("+++")) {
       const match = line.match(/^[+-]{3} [ab]\/(.+)$/);
       if (match) {
         const filename = match[1];
-        if (line.startsWith('---')) {
+        if (line.startsWith("---")) {
           currentFile = { filename, hunks: [] };
           files.push(currentFile);
         }
@@ -63,10 +63,10 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
     }
 
     // Hunk header: @@ -145,8 +145,8 @@ Measure 23
-    if (line.startsWith('@@')) {
+    if (line.startsWith("@@")) {
       if (currentFile) {
         currentHunk = {
-          header: line as DiffHunk['header'],
+          header: line as DiffHunk["header"],
           lines: [],
         };
         currentFile.hunks.push(currentHunk);
@@ -76,12 +76,12 @@ export function parseMusicXMLDiff(diffOutput: string): ParsedDiff[] {
 
     // Diff lines
     if (currentHunk) {
-      let type: DiffLine['type'] = 'context';
+      let type: DiffLine["type"] = "context";
 
-      if (line.startsWith('+')) {
-        type = 'add';
-      } else if (line.startsWith('-')) {
-        type = 'remove';
+      if (line.startsWith("+")) {
+        type = "add";
+      } else if (line.startsWith("-")) {
+        type = "remove";
       }
       currentHunk.lines.push({
         type,
@@ -104,47 +104,47 @@ export async function getMusicXMLDiff(
     commit1?: string;
     commit2?: string;
     context?: number; // -U lines of context
-    algorithm?: 'default' | 'patience' | 'histogram' | 'minimal';
+    algorithm?: "default" | "patience" | "histogram" | "minimal";
     colorWords?: boolean;
     useFunctionContext?: boolean; // Use git's --function-context
     noIndex?: boolean; // Compare files directly without git
-  } = {}
+  } = {},
 ): Promise<string> {
   const {
-    file = '',
-    file1 = '',
-    file2 = '',
-    commit1 = '',
-    commit2 = '',
+    file = "",
+    file1 = "",
+    file2 = "",
+    commit1 = "",
+    commit2 = "",
     context = 10,
-    algorithm = 'patience',
+    algorithm = "patience",
     colorWords = false,
     useFunctionContext = false,
     noIndex = false,
   } = options;
 
-  const args = ['diff', '-w'];
+  const args = ["diff", "-w"];
 
   // Add --no-index for comparing files outside git
   if (noIndex || (file1 && file2)) {
-    args.push('--no-index');
+    args.push("--no-index");
   }
 
   // Use function context OR numeric context (not both)
   if (useFunctionContext) {
-    args.push('--function-context');
+    args.push("--function-context");
   } else {
     args.push(`-U${context}`);
   }
 
   // Add algorithm
-  if (algorithm !== 'default') {
+  if (algorithm !== "default") {
     args.push(`--${algorithm}`);
   }
 
   // Add color-words for inline highlighting
   if (colorWords) {
-    args.push('--color-words');
+    args.push("--color-words");
   }
 
   // Handle different modes
@@ -155,13 +155,13 @@ export async function getMusicXMLDiff(
     // Normal git mode: compare commits
     if (commit1) args.push(commit1);
     if (commit2) args.push(commit2);
-    if (file) args.push('--', file);
+    if (file) args.push("--", file);
   }
 
   // Execute with Bun
-  const proc = Bun.spawn(['git', ...args], {
-    stdout: 'pipe',
-    stderr: 'pipe',
+  const proc = Bun.spawn(["git", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
   });
 
   const output = await new Response(proc.stdout).text();
@@ -176,20 +176,20 @@ export async function getMusicXMLDiffStats(
     commit1?: string;
     commit2?: string;
     noIndex?: boolean; // Compare files directly without git
-  } = {}
+  } = {},
 ): Promise<string> {
   const {
-    file = '',
-    file1 = '',
-    file2 = '',
-    commit1 = '',
-    commit2 = '',
+    file = "",
+    file1 = "",
+    file2 = "",
+    commit1 = "",
+    commit2 = "",
     noIndex = false,
   } = options;
-  const args = ['diff', '-w', '--stat'];
+  const args = ["diff", "-w", "--stat"];
   // Add --no-index for comparing files outside git
   if (noIndex || (file1 && file2)) {
-    args.push('--no-index');
+    args.push("--no-index");
   }
 
   // Handle different modes
@@ -200,13 +200,13 @@ export async function getMusicXMLDiffStats(
     // Normal git mode: compare commits
     if (commit1) args.push(commit1);
     if (commit2) args.push(commit2);
-    if (file) args.push('--', file);
+    if (file) args.push("--", file);
   }
 
   // Execute with Bun
-  const proc = Bun.spawn(['git', ...args], {
-    stdout: 'pipe',
-    stderr: 'pipe',
+  const proc = Bun.spawn(["git", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
   });
 
   const output = await new Response(proc.stdout).text();
@@ -216,12 +216,9 @@ export async function getMusicXMLDiffStats(
 /**
  * Expand diff to show full parent context for important tags
  */
-export function expandParentContext(
-  diffOutput: string,
-  xmlContent: string
-): string {
+export function expandParentContext(diffOutput: string, xmlContent: string): string {
   const parsed = parseMusicXMLDiff(diffOutput);
-  const xmlLines = xmlContent.split('\n');
+  const xmlLines = xmlContent.split("\n");
 
   // For each hunk, detect if we're inside an important parent
   for (const file of parsed) {
@@ -239,7 +236,10 @@ export function expandParentContext(
 /**
  * Detect which parent context tag we're inside
  */
-function detectParentContext(hunk: DiffHunk, xmlLines: string[]): `${typeof CONTEXT_PARENTS[number]}${string}` | undefined {
+function detectParentContext(
+  hunk: DiffHunk,
+  xmlLines: string[],
+): `${(typeof CONTEXT_PARENTS)[number]}${string}` | undefined {
   // Extract line number from hunk header: @@ -145,8 +145,8 @@
   const match = hunk.header.match(/@@ -(\d+),/);
   if (!match) return undefined;
@@ -248,7 +248,7 @@ function detectParentContext(hunk: DiffHunk, xmlLines: string[]): `${typeof CONT
 
   // Search backwards from the hunk start to find parent tags
   for (let i = startLine - 1; i >= 0; i--) {
-    const line = xmlLines[i]?.trim() || '';
+    const line = xmlLines[i]?.trim() || "";
 
     for (const parent of CONTEXT_PARENTS) {
       // Match opening tag: <measure number="2">
@@ -260,7 +260,7 @@ function detectParentContext(hunk: DiffHunk, xmlLines: string[]): `${typeof CONT
     }
 
     // Stop if we hit the file start or another major section
-    if (line.startsWith('<?xml') || line.startsWith('<score-partwise')) {
+    if (line.startsWith("<?xml") || line.startsWith("<score-partwise")) {
       break;
     }
   }
@@ -274,12 +274,12 @@ function detectParentContext(hunk: DiffHunk, xmlLines: string[]): `${typeof CONT
 export function extractParentTag(
   xmlContent: string,
   tagName: string,
-  attributes: Record<string, string> = {}
+  attributes: Record<string, string> = {},
 ): string | null {
-  const lines = xmlContent.split('\n');
+  const lines = xmlContent.split("\n");
   let depth = 0;
   let capturing = false;
-  let result: string[] = [];
+  const result: string[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -288,7 +288,7 @@ export function extractParentTag(
     if (!capturing) {
       const attrPattern = Object.entries(attributes)
         .map(([key, val]) => `${key}="${val}"`)
-        .join('.*');
+        .join(".*");
 
       const pattern = new RegExp(`<${tagName}[^>]*${attrPattern}[^>]*>`);
       if (pattern.test(trimmed)) {
@@ -297,8 +297,8 @@ export function extractParentTag(
         result.push(line);
 
         // Check if self-closing or single-line
-        if (trimmed.includes(`</${tagName}>`) || trimmed.endsWith('/>')) {
-          return result.join('\n');
+        if (trimmed.includes(`</${tagName}>`) || trimmed.endsWith("/>")) {
+          return result.join("\n");
         }
         continue;
       }
@@ -309,13 +309,13 @@ export function extractParentTag(
       result.push(line);
 
       // Track nesting depth
-      const openTags = (trimmed.match(new RegExp(`<${tagName}[^/>]*>`, 'g')) || []).length;
-      const closeTags = (trimmed.match(new RegExp(`</${tagName}>`, 'g')) || []).length;
+      const openTags = (trimmed.match(new RegExp(`<${tagName}[^/>]*>`, "g")) || []).length;
+      const closeTags = (trimmed.match(new RegExp(`</${tagName}>`, "g")) || []).length;
 
       depth += openTags - closeTags;
 
       if (depth === 0) {
-        return result.join('\n');
+        return result.join("\n");
       }
     }
   }
@@ -328,7 +328,7 @@ export function extractParentTag(
  *
  */
 function reconstructDiff(parsed: ParsedDiff[]): string {
-  let result = '';
+  let result = "";
 
   for (const file of parsed) {
     result += `--- a/${file.filename}\n`;
@@ -339,12 +339,12 @@ function reconstructDiff(parsed: ParsedDiff[]): string {
       if (hunk.parentContext) {
         result += ` [${hunk.parentContext}]`;
       }
-      result += '\n';
+      result += "\n";
 
       for (const line of hunk.lines) {
-        const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
-        const lineNumber = line.lineNumber
-        result += `${lineNumber ? `${lineNumber} | ` : ''}${prefix}${line.content}\n`;
+        const prefix = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
+        const lineNumber = line.lineNumber;
+        result += `${lineNumber ? `${lineNumber} | ` : ""}${prefix}${line.content}\n`;
       }
     }
   }
@@ -368,12 +368,12 @@ export async function getEnhancedMusicXMLDiff(
     showFullDefaults?: boolean;
     showFullIdentification?: boolean;
     ensureCompleteBlocks?: boolean; // NEW: Guarantee complete XML blocks
-  }
+  },
 ): Promise<string> {
   const {
-    file2 = '',
-    commit1 = 'HEAD',
-    commit2 = '',
+    file2 = "",
+    commit1 = "HEAD",
+    commit2 = "",
     showFullMeasures = true,
     showFullPartList = true,
     showFullCredit = true,
@@ -390,13 +390,13 @@ export async function getEnhancedMusicXMLDiff(
     commit1?: string;
     commit2?: string;
     context?: number; // -U lines of context
-    algorithm?: 'default' | 'patience' | 'histogram' | 'minimal';
+    algorithm?: "default" | "patience" | "histogram" | "minimal";
     colorWords?: boolean;
     useFunctionContext?: boolean; // Use git's --function-context
     noIndex?: boolean; // Compare files directly without git
   } = {
     useFunctionContext: true, // Use git's built-in function detection
-    algorithm: 'patience',
+    algorithm: "patience",
   };
 
   // Check if we're in --no-index mode (comparing two files)
@@ -415,7 +415,7 @@ export async function getEnhancedMusicXMLDiff(
   // STEP 2: Read XML file(s) for parsing
   const xmlFile = Bun.file(xmlFilePath);
   const xmlContent = await xmlFile.text();
-  const xmlLines = xmlContent.split('\n');
+  const xmlLines = xmlContent.split("\n");
 
   // STEP 3: Parse the diff output
   const parsed = parseMusicXMLDiff(diff);
@@ -432,11 +432,11 @@ export async function getEnhancedMusicXMLDiff(
 
         // Check if this parent type should be fully shown
         const shouldExpand =
-          (showFullMeasures && context.startsWith('measure')) ||
-          (showFullPartList && context.startsWith('part-list')) ||
-          (showFullCredit && context.startsWith('credit')) ||
-          (showFullDefaults && context.startsWith('defaults')) ||
-          (showFullIdentification && context.startsWith('identification'));
+          (showFullMeasures && context.startsWith("measure")) ||
+          (showFullPartList && context.startsWith("part-list")) ||
+          (showFullCredit && context.startsWith("credit")) ||
+          (showFullDefaults && context.startsWith("defaults")) ||
+          (showFullIdentification && context.startsWith("identification"));
 
         // STEP 5: If requested, extract the COMPLETE parent block
         if (shouldExpand && ensureCompleteBlocks) {
@@ -447,9 +447,9 @@ export async function getEnhancedMusicXMLDiff(
           //TODO: create all attributes for each the shouldExpand tags (eg. measures, credit, etc)
           const attributes: Record<string, string> = {};
           if (attrMatch) {
-            attrMatch.forEach(attr => {
-              const [key, val] = attr.split('=');
-              attributes[key] = val.replace(/['"]/g, '');
+            attrMatch.forEach((attr) => {
+              const [key, val] = attr.split("=");
+              attributes[key] = val.replace(/['"]/g, "");
             });
           }
 
@@ -457,14 +457,14 @@ export async function getEnhancedMusicXMLDiff(
           const fullTagContent = extractParentTag(xmlContent, tagName, attributes);
           if (fullTagContent) {
             // Replace hunk lines with complete block
-            const completeLines = fullTagContent.split('\n');
+            const completeLines = fullTagContent.split("\n");
 
             //INFO: Here we just take the 1st line of the fullTagContent as this is what is missing from git diff's function-context
             //eg. <measure number="1" width="515">
             hunk.lines.unshift({
-              type: 'parentOfContext',
-              content: completeLines[0]
-            })
+              type: "parentOfContext",
+              content: completeLines[0],
+            });
           }
         }
       }
@@ -479,24 +479,24 @@ export async function getEnhancedMusicXMLDiff(
 export function formatDiffForTerminal(diff: string, useColors = true): string {
   if (!useColors) return diff;
 
-  const lines = diff.split('\n');
-  const colored = lines.map(line => {
-    if (line.startsWith('+++') || line.startsWith('---')) {
+  const lines = diff.split("\n");
+  const colored = lines.map((line) => {
+    if (line.startsWith("+++") || line.startsWith("---")) {
       return `\x1b[1m${line}\x1b[0m`; // Bold
     }
-    if (line.startsWith('@@')) {
+    if (line.startsWith("@@")) {
       return `\x1b[36m${line}\x1b[0m`; // Cyan
     }
-    if (line.startsWith('+')) {
+    if (line.startsWith("+")) {
       return `\x1b[32m${line}\x1b[0m`; // Green
     }
-    if (line.startsWith('-')) {
+    if (line.startsWith("-")) {
       return `\x1b[31m${line}\x1b[0m`; // Red
     }
     return line;
   });
 
-  return colored.join('\n');
+  return colored.join("\n");
 }
 
 // Example usage:

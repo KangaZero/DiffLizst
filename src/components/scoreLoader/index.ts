@@ -288,13 +288,10 @@ export class ScoreLoader extends HTMLElement {
     this.#shadow = this.attachShadow({ mode: "open" });
     this.#shadow.appendChild(template.content.cloneNode(true));
 
-    this.#triggerBtn =
-      this.#shadow.querySelector<HTMLButtonElement>(".trigger")!;
+    this.#triggerBtn = this.#shadow.querySelector<HTMLButtonElement>(".trigger")!;
     this.#panel = this.#shadow.querySelector<HTMLDivElement>(".panel")!;
-    this.#samplesList =
-      this.#shadow.querySelector<HTMLDivElement>(".samples-list")!;
-    this.#fileInput =
-      this.#shadow.querySelector<HTMLInputElement>('input[type="file"]')!;
+    this.#samplesList = this.#shadow.querySelector<HTMLDivElement>(".samples-list")!;
+    this.#fileInput = this.#shadow.querySelector<HTMLInputElement>('input[type="file"]')!;
 
     this.#triggerBtn.addEventListener("click", () => this.#toggle());
 

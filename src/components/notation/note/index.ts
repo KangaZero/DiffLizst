@@ -1,3 +1,3 @@
-import './note.css'
+import "./note.css";
 
-document.querySelectorAll('g.note')
+document.querySelectorAll("g.note");

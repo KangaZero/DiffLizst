@@ -1,21 +1,66 @@
 {
-  "name": "DiffLizst",
-  "private": true,
-  "version": "0.0.1",
+  "name": "@kangazero/difflizst-core",
+  "description": "Browser-native, backend-free structural diff for MusicXML scores. Drives the DiffLizst web app and is published as a small standalone library.",
+  "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
+  "author": "KangaZero <samuelyongw@gmail.com>",
+  "homepage": "https://kangazero.github.io/DiffLizst/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KangaZero/DiffLizst.git"
+  },
+  "keywords": [
+    "musicxml",
+    "diff",
+    "music",
+    "score",
+    "structural-diff",
+    "browser"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "files": [
+    "dist-lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist-lib/lib.js",
+  "module": "./dist-lib/lib.js",
+  "types": "./dist-lib/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-lib/lib.d.ts",
+      "import": "./dist-lib/lib.js"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:lib": "vite build --mode lib",
     "preview": "vite preview",
-    "test": "bun run ./src/scripts/MXMLDiffParser.test.ts ./src/scores/Chopin/etudeOp10No1.xml ./src/scores/Chopin/etudeOp10No2.xml",
-    "diff": "bun run ./src/scripts/diffToUse.test.ts ./src/scores/Chopin/etudeOp10No1.xml ./src/scores/Chopin/etudeOp10No2.xml"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "bun test src/tests/",
+    "test:unit": "bun test src/tests/",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "verify": "bun run lint && bun run typecheck && bun run test:unit && bun run build && bun run build:lib"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "@playwright/test": "^1.60.0",
     "@types/bun": "^1.3.14",
     "@types/verovio": "^5.1.0",
     "linkedom": "^0.18.12",
     "typescript": "^6.0.3",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vite-plugin-dts": "^5.0.1"
   },
   "dependencies": {
     "monaco-editor": "^0.55.1",
