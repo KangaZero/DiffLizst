@@ -770,6 +770,9 @@ code {
 .notation-stage {
   position: relative;
   width: min(100%, 720px);
+  /* Reserve vertical space so the "Loading score…" placeholder doesn't shift
+     by ~2300px when Verovio paints — keeps CLS ≈ 0. */
+  min-height: 480px;
   display: flex;
   justify-content: center;
   overflow-x: auto;

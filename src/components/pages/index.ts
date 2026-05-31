@@ -5,8 +5,61 @@ import { getTotalPageCount } from "@/utils/getTotalPageCount";
 
 const template = document.createElement("template");
 
-// < !-- < style > ${ styles }</style> -->
 template.innerHTML = `
+  <style>
+    :host { display: inline-flex; }
+    .container {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    button.page-btn,
+    button.control {
+      min-width: 32px;
+      min-height: 32px;
+      padding: 4px 8px;
+      border: 1px solid var(--border, #e5e4e7);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-h, #08060d);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    button.page-btn:hover:not(:disabled),
+    button.control:hover:not(:disabled) {
+      background: var(--accent-bg, rgba(170, 59, 255, 0.1));
+      border-color: var(--accent-border, rgba(170, 59, 255, 0.5));
+    }
+    button.page-btn:focus-visible,
+    button.control:focus-visible {
+      outline: 2px solid var(--accent, #9b35f5);
+      outline-offset: 2px;
+    }
+    button[aria-current="true"] {
+      background: var(--accent, #9b35f5);
+      color: white;
+      border-color: var(--accent, #9b35f5);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .ellipsis {
+      padding: 0 4px;
+      color: var(--text, #6b6375);
+      user-select: none;
+    }
+    @media (pointer: coarse) {
+      button.page-btn,
+      button.control {
+        min-width: 44px;
+        min-height: 44px;
+      }
+    }
+  </style>
   <div class="container" part="container" role="navigation" aria-label="Pagination"></div>
 `;
 
