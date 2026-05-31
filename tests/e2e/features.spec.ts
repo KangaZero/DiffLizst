@@ -490,6 +490,81 @@ test.describe("Page footer", () => {
   });
 });
 
+// ─── Swap scores button ────────────────────────────────────────────────────
+
+test.describe("Swap scores button", () => {
+  test("swap button exchanges the score-loader file header labels", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Load a distinctly-named score into each slot via score-file-drop so we
+    // have two known display names we can assert against after the swap.
+    await dispatchScoreFileDrop(page, NOTATION, minimalMusicXML("C"), "alpha-score.xml");
+    await expect(page.locator(`${NOTATION} svg`).first()).toBeVisible({ timeout: 20_000 });
+
+    await dispatchScoreFileDrop(page, NOTATION_2, minimalMusicXML("E"), "beta-score.xml");
+    await expect(page.locator(`${NOTATION_2} svg`).first()).toBeVisible({ timeout: 20_000 });
+
+    // Wait for the diff to settle (swap button becomes enabled when both scores are loaded).
+    await expect(page.locator("#swap-scores")).toBeEnabled({ timeout: 10_000 });
+
+    // Capture headers before swap — diff-file-old = left (slot 1), diff-file-new = right (slot 2).
+    // querySelector returns the first matching element (Monaco header), which is always in the DOM.
+    const leftBefore = await page.evaluate(
+      () => document.querySelector(".diff-file-old")?.textContent?.trim() ?? "",
+    );
+    const rightBefore = await page.evaluate(
+      () => document.querySelector(".diff-file-new")?.textContent?.trim() ?? "",
+    );
+
+    expect(leftBefore).toContain("alpha-score.xml");
+    expect(rightBefore).toContain("beta-score.xml");
+
+    await page.locator("#swap-scores").click();
+
+    // After swap the names must be exchanged.
+    await expect(page.locator(".diff-file-old").first()).toHaveText(/beta-score\.xml/, {
+      timeout: 5_000,
+    });
+    await expect(page.locator(".diff-file-new").first()).toHaveText(/alpha-score\.xml/, {
+      timeout: 5_000,
+    });
+  });
+
+  test("swap button reverses add/remove overlay counts", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Wait for the swap button to be enabled (both scores loaded).
+    await expect(page.locator("#swap-scores")).toBeEnabled({ timeout: 10_000 });
+
+    // Count add and remove overlays before swap.
+    const countsBefore = await page.evaluate(() => ({
+      add: document.querySelectorAll(".diff-overlay--add").length,
+      remove: document.querySelectorAll(".diff-overlay--remove").length,
+    }));
+
+    // There must be at least some overlays to make the assertion meaningful.
+    const totalBefore = countsBefore.add + countsBefore.remove;
+    expect(totalBefore).toBeGreaterThan(0);
+
+    await page.locator("#swap-scores").click();
+
+    // After swap, add and remove counts must be exchanged.
+    // Allow a brief moment for the re-render and reapply to complete.
+    const countsAfter = await page.evaluate(() => ({
+      add: document.querySelectorAll(".diff-overlay--add").length,
+      remove: document.querySelectorAll(".diff-overlay--remove").length,
+    }));
+
+    // What was added is now removed and vice versa.
+    expect(countsAfter.add).toBe(countsBefore.remove);
+    expect(countsAfter.remove).toBe(countsBefore.add);
+  });
+});
+
 // ─── Within-note diff tooltip summary ─────────────────────────────────────
 
 test.describe("Within-note diff tooltip summary", () => {

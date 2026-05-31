@@ -143,6 +143,81 @@ export function renderNotation(
 }
 
 /**
+ * Swap the two loaded scores in-place and re-render both notation panes.
+ *
+ * Exchanges all paired state fields (XML, toolkit, id maps), re-renders each
+ * container with the now-swapped toolkit, rebuilds the id maps, and runs a
+ * fresh diff so overlays reflect the reversed change direction.
+ *
+ * @param state        Mutable app state owned by main.ts.
+ * @param containers   Tuple of [container1, container2].
+ * @param pagination   Tuple of [paginationEl, paginationEl2].
+ * @param scaleInput   Shared scale input to read the current scale from.
+ * @param opts         Current diff settings.
+ * @param onModelUpdate Called with (side, xml) so the Monaco models stay in sync.
+ * @param onFilenameUpdate Called with (side, filename) to update file header labels.
+ * @param filename1    Display name for the current left score (becomes right after swap).
+ * @param filename2    Display name for the current right score (becomes left after swap).
+ */
+export function swapScores(
+  state: NotationState,
+  containers: [HTMLDivElement, HTMLDivElement],
+  pagination: [Pages, Pages],
+  scaleInput: HTMLInputElement,
+  opts: DiffSettingsValue,
+  onModelUpdate: (side: 1 | 2, xml: string) => void,
+  onFilenameUpdate: (side: 1 | 2, filename: string) => void,
+  filename1: string,
+  filename2: string,
+): void {
+  const scale = Number(scaleInput.value);
+
+  // Swap XML strings.
+  const tmpXML = state.originalXML;
+  state.originalXML = state.xMLToCompare;
+  state.xMLToCompare = tmpXML;
+
+  // Swap toolkits.
+  const tmpToolkit = state.toolkit;
+  state.toolkit = state.toolkit2;
+  state.toolkit2 = tmpToolkit;
+
+  // Swap id maps.
+  const tmpMeasureMap = state.measureIdMap1;
+  state.measureIdMap1 = state.measureIdMap2;
+  state.measureIdMap2 = tmpMeasureMap;
+
+  const tmpChildMap = state.childIdMap1;
+  state.childIdMap1 = state.childIdMap2;
+  state.childIdMap2 = tmpChildMap;
+
+  // Re-render both panes with the now-swapped data.
+  renderNotation(state.originalXML, pagination[0], state.toolkit, containers[0], scale);
+  renderNotation(state.xMLToCompare, pagination[1], state.toolkit2, containers[1], scale);
+
+  // Rebuild id maps from the freshly rendered SVGs.
+  if (state.toolkit) {
+    state.measureIdMap1 = buildMeasureIdMap(state.toolkit);
+    state.childIdMap1 = buildChildIdMap(state.toolkit);
+  }
+  if (state.toolkit2) {
+    state.measureIdMap2 = buildMeasureIdMap(state.toolkit2);
+    state.childIdMap2 = buildChildIdMap(state.toolkit2);
+  }
+
+  // Push swapped XML into Monaco models.
+  if (state.originalXML) onModelUpdate(1, state.originalXML);
+  if (state.xMLToCompare) onModelUpdate(2, state.xMLToCompare);
+
+  // Update filename headers: each side gets the other's name.
+  onFilenameUpdate(1, filename2);
+  onFilenameUpdate(2, filename1);
+
+  // Re-run diff so overlays reflect the reversed change direction.
+  runDiff(state, containers, opts);
+}
+
+/**
  * Swap out one score and refresh everything downstream.
  *
  * Mutates the relevant fields on `state` in-place (single source of truth

@@ -1672,6 +1672,18 @@ code {
   }
 }
 
+/* ─── Swap scores button ────────────────────────────────────────────────── */
+
+/* Inherits all sizing/border/cursor/transition from .change-nav-btn.
+ * Flips the icon horizontally on hover to suggest the swap direction.
+ * Guarded by prefers-reduced-motion so users sensitive to motion are unaffected. */
+@media (prefers-reduced-motion: no-preference) {
+  .swap-btn:hover:not(:disabled) svg {
+    transform: scaleX(-1);
+    transition: transform var(--duration-fast);
+  }
+}
+
 /* ─── Touch targets: 44×44 px minimum on coarse-pointer devices ────────── */
 
 @media (pointer: coarse) {

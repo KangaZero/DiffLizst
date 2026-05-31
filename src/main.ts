@@ -17,8 +17,10 @@ import {
   renderNotation,
   rescale,
   runDiff,
+  swapScores,
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
+import { wireScrollSync } from "@/bootstrap/scroll-sync";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
@@ -101,6 +103,7 @@ const diffSummaryMobileCloseBtn = document.querySelector<HTMLButtonElement>(
   "#diff-summary-mobile-close",
 )!;
 const diffSummaryOpenBtn = document.querySelector<HTMLButtonElement>("#toolbar-summary-open");
+const swapScoresBtn = document.querySelector<HTMLButtonElement>("#swap-scores")!;
 
 if (
   !notationContainer ||
@@ -126,10 +129,13 @@ if (
   !nextChangeBtn ||
   !changeCounterEl ||
   !diffSummaryAside ||
-  !diffSummaryMobileCloseBtn
+  !diffSummaryMobileCloseBtn ||
+  !swapScoresBtn
 ) {
   throw new Error("Required app elements not found in DOM");
 }
+
+wireScrollSync(notationContainer, notationContainer2);
 
 // ─── Pagination components ─────────────────────────────────────────────────
 
@@ -426,6 +432,7 @@ function refreshChangeNav(): void {
   updateChangeCounter();
   prevChangeBtn.disabled = currentChanges.length === 0;
   nextChangeBtn.disabled = currentChanges.length === 0;
+  swapScoresBtn.disabled = !state.originalXML || !state.xMLToCompare;
   diffSummary.refresh(currentChanges);
   enrichOverlays(containers);
 }
@@ -503,6 +510,29 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ─── Button wiring ─────────────────────────────────────────────────────────
+
+swapScoresBtn.addEventListener("click", () => {
+  // Read displayed filenames from the DOM — they are the authoritative source
+  // since reloadScore and the initial load both write to these elements.
+  const filename1 =
+    document.querySelector<HTMLElement>(".diff-file-old")?.textContent?.trim() ?? "";
+  const filename2 =
+    document.querySelector<HTMLElement>(".diff-file-new")?.textContent?.trim() ?? "";
+
+  swapScores(
+    state,
+    containers,
+    [paginationEl, paginationEl2],
+    sharedScaleInput,
+    currentSettings,
+    makeModelUpdateCb(),
+    makeFilenameCb(),
+    filename1,
+    filename2,
+  );
+  refreshChangeNav();
+  if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
+});
 
 wireEditToggle(diffEditToggleBtn);
 
