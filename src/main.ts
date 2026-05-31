@@ -429,6 +429,9 @@ function openSidebarOverlay(): void {
 function closeSidebarOverlay(): void {
   delete diffSummaryAside.dataset.mobileOpen;
   diffSummaryAside.setAttribute("aria-hidden", "true");
+  // Restore focus to whichever button opened the overlay — without this
+  // focus is dropped to <body> and keyboard users lose their place.
+  diffSummaryOpenBtn?.focus();
 }
 
 diffSummaryMobileCloseBtn.addEventListener("click", closeSidebarOverlay);
@@ -651,6 +654,11 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
         currentSettings,
         monacoCallbacks,
       );
+      // Settings changes (palette, line-numbers, minimap, etc.) trigger a
+      // Monaco re-render that recreates internal models. The overlay-→-Monaco
+      // hover bridge needs to be re-pointed at the fresh editor instance,
+      // otherwise hovering an overlay no longer highlights its Monaco line.
+      refreshHoverLink(getOverlayRecords);
     });
   }
 });
