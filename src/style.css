@@ -769,6 +769,8 @@ code {
 
 .notation-stage {
   position: relative;
+  /* Mobile + stacked layouts: take whatever width the column allows, up to a
+     comfortable 720px cap. */
   width: min(100%, 720px);
   /* Reserve vertical space so the "Loading score…" placeholder doesn't shift
      by ~2300px when Verovio paints — keeps CLS ≈ 0. */
@@ -781,6 +783,16 @@ code {
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   box-sizing: border-box;
+}
+
+/* From `md` upward, when the side-by-side layout is in play, cap each score
+   pane at 30 % of the viewport so the two panes + sidebar leave breathing
+   room around the toolbar centre. Horizontal scroll inside the stage takes
+   over once Verovio renders wider than 30 vw at the active scale. */
+@media (min-width: 768px) {
+  .notation-stage {
+    width: min(100%, 30vw);
+  }
 }
 
 /* ─── Diff overlays ──────────────────────────────── */
