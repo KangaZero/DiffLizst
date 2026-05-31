@@ -135,7 +135,7 @@ export const APP_HTML = `
       Powered by
       <a class="app-footer-link" href="https://www.verovio.org/" target="_blank" rel="noopener noreferrer">Verovio</a>,
       <a class="app-footer-link" href="https://microsoft.github.io/monaco-editor/" target="_blank" rel="noopener noreferrer">Monaco</a>,
-      <a class="app-footer-link" href="https://bun.com/" target="_blank" rel="noopener noreferrer">Bun</a>
+      <a class="app-footer-link" href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a>
     </span>
   </div>
 </footer>
