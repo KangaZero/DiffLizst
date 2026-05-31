@@ -19,8 +19,10 @@ import {
   runDiff,
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
+import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
+import { loadScoreFile } from "@/utils/loadScoreFile";
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
 import { DEFAULT_SETTINGS, type DiffSettingsValue } from "./components/diffSettings";
 import type { Pages } from "./components/pages";
@@ -287,6 +289,44 @@ function wireScoreLoader(el: ScoreLoader, which: 1 | 2): void {
 
 wireScoreLoader(scoreLoaderEl, 1);
 wireScoreLoader(scoreLoaderEl2, 2);
+
+// ─── File drop zones ──────────────────────────────────────────────────────
+// Drop overlays render on top of each notation stage. They stay invisible
+// until the user drags a file over the stage (or focuses the zone via Tab),
+// at which point they expand and accept .xml / .musicxml / .mxl uploads.
+
+function wireDropZone(stage: HTMLElement, which: 1 | 2, slotLabel: string): void {
+  wireFileDrop(stage, slotLabel);
+  stage.addEventListener("score-file-drop", (e) => {
+    const { file } = (e as CustomEvent<ScoreFileDropDetail>).detail;
+    loadScoreFile(file)
+      .then(({ xml, filename }) => {
+        reloadScore(
+          which,
+          xml,
+          filename,
+          state,
+          containers,
+          [paginationEl, paginationEl2],
+          sharedScaleInput,
+          currentSettings,
+          makeModelUpdateCb(),
+          makeFilenameCb(),
+        );
+        if (activeView === "gitdiff") {
+          renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
+        }
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : "Failed to load file";
+        // Surface via the stage's title so the failure is at least diagnosable.
+        stage.title = message;
+      });
+  });
+}
+
+wireDropZone(notationContainer, 1, "score 1");
+wireDropZone(notationContainer2, 2, "score 2");
 
 // ─── Button wiring ─────────────────────────────────────────────────────────
 
