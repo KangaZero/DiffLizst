@@ -2,7 +2,7 @@
  * Unit tests for the flattenChanges + countByChangeType helpers used by the
  * next/prev nav and the diff summary sidebar.
  *
- * Run with: bun test src/tests/changeIndex.test.ts
+ * Run with: pnpm vitest run src/tests/changeIndex.test.ts
  */
 
 import { describe, expect, it } from "vitest";

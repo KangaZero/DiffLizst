@@ -2,12 +2,12 @@
  * Unit tests for the DOM-resolution helpers in applyDiffHighlights.ts.
  *
  * `applyDiffHighlights` itself is a side-effectful renderer that mutates real
- * `<div>` containers, which is out of scope for `bun test`. But the two
- * map-building helpers (`buildMeasureIdMap`, `buildChildIdMap`) are pure
+ * `<div>` containers, which is out of scope for jsdom-free unit tests. But the
+ * two map-building helpers (`buildMeasureIdMap`, `buildChildIdMap`) are pure
  * — they take a toolkit-like object that returns an MEI string and produce
  * lookup maps. Those are eminently unit-testable.
  *
- * Run with: `bun test src/tests/applyDiffHighlights.test.ts`
+ * Run with: `pnpm vitest run src/tests/applyDiffHighlights.test.ts`
  */
 
 import { describe, expect, it } from "vitest";

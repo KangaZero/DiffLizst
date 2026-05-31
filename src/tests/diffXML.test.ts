@@ -5,7 +5,7 @@
  * if the implementation regressed. Tests use minimal XML fixtures
  * rather than the full Chopin scores to keep them fast and readable.
  *
- * Run with: bun test src/tests/diffXML.test.ts
+ * Run with: pnpm vitest run src/tests/diffXML.test.ts
  */
 
 import { readFileSync } from "node:fs";

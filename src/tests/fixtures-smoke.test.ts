@@ -14,7 +14,7 @@
  * chord symbols, ornaments, etc. — features the synthetic unit suite
  * doesn't exercise.
  *
- * Run with: `bun test src/tests/fixtures-smoke.test.ts`
+ * Run with: `pnpm vitest run src/tests/fixtures-smoke.test.ts`
  */
 
 import { readdirSync, readFileSync } from "node:fs";

@@ -5,7 +5,7 @@
  * wading through 70+ lines of markup.
  *
  * `__APP_VERSION__` is replaced at build time by Vite (`define` config) and
- * falls back to "dev" during `bun run dev`, so the footer always shows
+ * falls back to "dev" during `pnpm run dev`, so the footer always shows
  * something meaningful.
  */
 

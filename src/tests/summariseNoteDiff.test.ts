@@ -2,7 +2,7 @@
  * Unit tests for `summariseNoteDiff` — the human-readable field walker that
  * powers the diff tooltip's "pitch: C4 -> E4" header.
  *
- * Run with: bun test src/tests/summariseNoteDiff.test.ts
+ * Run with: pnpm vitest run src/tests/summariseNoteDiff.test.ts
  */
 
 import { describe, expect, it } from "vitest";
