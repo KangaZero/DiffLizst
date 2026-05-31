@@ -23,6 +23,23 @@ export type DiffLine =
 export type ChangeType = "add" | "remove" | "change";
 
 /**
+ * One human-readable field change inside a `<note>` element.
+ *
+ * Produced by {@link summariseNoteDiff} when both sides of a diff are `<note>`
+ * elements that differ in a recognised semantic field (pitch, duration, voice,
+ * type, stem, lyric).  Rendered at the top of the diff tooltip so musicians
+ * see "pitch: C4 -> E4" instead of having to read raw XML.
+ */
+export type NoteFieldChange = {
+  /** Field name shown to the user, e.g. `"pitch"`, `"duration"`. */
+  field: string;
+  /** Old value, or `"(none)"` when the field was absent on the old side. */
+  before: string;
+  /** New value, or `"(none)"` when the field is absent on the new side. */
+  after: string;
+};
+
+/**
  * The computed diff for one XML element (a single `<measure>` or `<credit>`).
  *
  * `lines` is already trimmed to changed lines + surrounding context so it
@@ -33,6 +50,12 @@ export type ElementDiff = {
   /** Human-readable label shown in the tooltip header, e.g. `"measure 5"`. */
   label: string;
   lines: DiffLine[];
+  /**
+   * Optional list of recognised field-level changes when both sides of the
+   * diff are `<note>` elements.  Absent for non-note elements and for note
+   * diffs that didn't match any recognised field (e.g. attributes-only).
+   */
+  summary?: NoteFieldChange[];
 };
 
 /**
@@ -317,7 +340,15 @@ function elementDiff(
   const trimmed = trimContext(withRaw, opts.contextLines);
   // All differences were normalised away (e.g. whitespace-only with ignoreWhitespace: true)
   if (trimmed.length === 0) return null;
-  return { changeType: "change", label, lines: trimmed };
+
+  // When both sides are <note> elements, attach a human-readable field-level
+  // summary so the tooltip can show "pitch: C4 -> E4" above the raw lines.
+  const result: ElementDiff = { changeType: "change", label, lines: trimmed };
+  if (old.tagName === "note" && next.tagName === "note") {
+    const summary = summariseNoteDiff(old, next);
+    if (summary.length > 0) result.summary = summary;
+  }
+  return result;
 }
 
 /**
@@ -409,6 +440,108 @@ function diffChildrenByTag(
       }
     }
   }
+}
+
+// ─── Note-level field summary ──────────────────────────────────────────────
+
+/**
+ * Read the trimmed text content of the first matching child, or `null` if no
+ * such child exists. Centralised so each field extractor stays a one-liner.
+ */
+function childText(parent: Element, selector: string): string | null {
+  const el = parent.querySelector(selector);
+  if (!el) return null;
+  const text = el.textContent?.trim();
+  return text ? text : null;
+}
+
+/**
+ * Format a `<pitch>` element as a human note name like `"C#4"` or `"Eb5"`.
+ *
+ * Alter mapping follows MusicXML 4.0:
+ *   1  -> sharp        2  -> double sharp
+ *  -1  -> flat        -2  -> double flat
+ *   0 or missing      -> natural (no accidental glyph)
+ *
+ * Returns `null` if the element isn't a recognisable pitch (no step). Quarter
+ * tones (alter 0.5 etc.) are emitted verbatim as e.g. "C0.5/4" — we keep the
+ * raw alter so users can see the value rather than silently dropping it.
+ */
+function formatPitch(pitchEl: Element): string | null {
+  const step = childText(pitchEl, "step");
+  if (!step) return null;
+  const octave = childText(pitchEl, "octave") ?? "?";
+  const alterStr = childText(pitchEl, "alter");
+  const alter = alterStr === null ? 0 : Number(alterStr);
+  let accidental: string;
+  if (alter === 1) accidental = "#";
+  else if (alter === -1) accidental = "b";
+  else if (alter === 2) accidental = "##";
+  else if (alter === -2) accidental = "bb";
+  else if (alter === 0) accidental = "";
+  else accidental = `(${alterStr})`;
+  return `${step}${accidental}${octave}`;
+}
+
+/**
+ * Read a single semantic field from a `<note>` element and return it as a
+ * normalised string suitable for showing in the tooltip.
+ *
+ * Returns `null` when the field is absent so callers can distinguish "the
+ * field was added/removed" from "the field changed".
+ */
+type NoteFieldReader = (note: Element) => string | null;
+
+const NOTE_FIELDS: ReadonlyArray<{ field: string; read: NoteFieldReader }> = [
+  {
+    field: "pitch",
+    read: (note) => {
+      const pitch = note.querySelector("pitch");
+      if (pitch) return formatPitch(pitch);
+      if (note.querySelector("rest")) return "rest";
+      const unpitched = note.querySelector("unpitched");
+      if (unpitched) {
+        const step = childText(unpitched, "display-step");
+        const oct = childText(unpitched, "display-octave");
+        if (step) return `unpitched ${step}${oct ?? ""}`;
+      }
+      return null;
+    },
+  },
+  { field: "duration", read: (note) => childText(note, "duration") },
+  { field: "voice", read: (note) => childText(note, "voice") },
+  { field: "type", read: (note) => childText(note, "type") },
+  { field: "stem", read: (note) => childText(note, "stem") },
+  {
+    field: "lyric",
+    read: (note) => {
+      const lyric = note.querySelector("lyric");
+      return lyric ? childText(lyric, "text") : null;
+    },
+  },
+];
+
+/**
+ * Walk a pair of `<note>` elements and produce a list of recognised
+ * field-level differences. Returns an empty array when no recognised field
+ * changed (caller should leave `summary` undefined in that case).
+ *
+ * Only emits an entry when the field actually differs between sides; absent
+ * vs. absent collapses to no entry.
+ */
+export function summariseNoteDiff(oldNote: Element, newNote: Element): NoteFieldChange[] {
+  const changes: NoteFieldChange[] = [];
+  for (const { field, read } of NOTE_FIELDS) {
+    const before = read(oldNote);
+    const after = read(newNote);
+    if (before === after) continue;
+    changes.push({
+      field,
+      before: before ?? "(none)",
+      after: after ?? "(none)",
+    });
+  }
+  return changes;
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
