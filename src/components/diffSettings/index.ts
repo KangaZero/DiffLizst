@@ -73,7 +73,7 @@ export const DEFAULT_SETTINGS: DiffSettingsValue = {
   showLineNumbers: true,
   showMiniMap: false,
   gitDiffOrientation: "split",
-  detailedDiff: false,
+  detailedDiff: true,
 };
 
 // Gear icon (Lucide `settings-2` path, MIT licensed)
@@ -264,7 +264,7 @@ template.innerHTML = `
   </div>
 <div class="row">
     <div class="label-wrap">
-      <label for="detailed-diff">Detailed Diff</label>
+      <label for="detailed-diff">Highlight each note (vs. whole measure)</label>
       <span class="hint">Diff per tag inside each measure</span>
     </div>
     <input id="detailed-diff" type="checkbox" ${DEFAULT_SETTINGS.detailedDiff ? "checked" : ""} />
