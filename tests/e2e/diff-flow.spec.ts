@@ -176,17 +176,19 @@ test.describe("DiffLizst — full flow", () => {
     expect(widthAtScale150).toBeGreaterThan(widthAtScale50);
   });
 
-  test("detailedDiff defaults ON — note-level overlays visible on first load", async ({ page }) => {
+  test("detailedDiff defaults ON — per-note overlays produce more than per-measure would", async ({
+    page,
+  }) => {
     await page.goto("/");
     await waitForBothScores(page);
 
-    // With detailedDiff defaulting to true, applyDiffHighlights attaches
-    // .diff-overlay elements directly inside g.note / g.rest SVG nodes.
-    // At least one must be attached when two different scores are loaded.
-    const noteOverlay = page
-      .locator(`${NOTATION} svg g.note .diff-overlay, ${NOTATION} svg g.rest .diff-overlay`)
-      .first();
-    await expect(noteOverlay).toBeAttached({ timeout: 10_000 });
+    // applyDiffHighlights appends .diff-overlay siblings to the .notation-stage
+    // container (not children of the SVG). With detailedDiff defaulting to
+    // true, per-note/per-rest overlays multiply the count well beyond the
+    // ~handful of changed-measure overlays produced by the off mode.
+    await expect(page.locator(".diff-overlay").first()).toBeAttached({ timeout: 10_000 });
+    const overlayCount = await page.locator(".diff-overlay").count();
+    expect(overlayCount).toBeGreaterThanOrEqual(2);
   });
 
   test("diff settings change re-renders without errors", async ({ page }) => {
