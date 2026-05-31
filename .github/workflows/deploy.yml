@@ -1,4 +1,8 @@
-name: Deploy to GitHub Pages
+name: Deploy web app to GitHub Pages
+
+# Triggered after a push to main. Re-runs the full build (cheap, ~30s) so the
+# Pages deploy is always self-contained — no cross-workflow artifact reuse to
+# fail mysteriously. CI gates already ran on the same commit via `ci.yml`.
 
 on:
   push:
@@ -10,30 +14,30 @@ permissions:
   pages: write
   id-token: write
 
-# Only one deployment at a time; don't cancel in-progress runs.
+# Only one Pages deployment at a time. Don't cancel in-progress deploys.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
   build:
+    name: Build for Pages
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: oven-sh/setup-bun@v2
-
+        with:
+          bun-version: latest
       - name: Install dependencies
-        run: bun install
-
+        run: bun install --frozen-lockfile
       - name: Build
         run: bun run build
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    name: Deploy to GitHub Pages
     needs: build
     runs-on: ubuntu-latest
     environment:
