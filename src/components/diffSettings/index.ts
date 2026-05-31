@@ -264,8 +264,8 @@ template.innerHTML = `
   </div>
 <div class="row">
     <div class="label-wrap">
-      <label for="detailed-diff">Highlight each note (vs. whole measure)</label>
-      <span class="hint">Diff per tag inside each measure</span>
+      <label for="detailed-diff">Highlight each note</label>
+      <span class="hint">Per-note overlays instead of whole-measure overlays</span>
     </div>
     <input id="detailed-diff" type="checkbox" ${DEFAULT_SETTINGS.detailedDiff ? "checked" : ""} />
   </div>
