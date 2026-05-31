@@ -12,6 +12,7 @@ import { APP_HTML } from "@/bootstrap/html-shell";
 import { wireMeasureJump } from "@/bootstrap/measure-jump";
 import { loadMonaco } from "@/bootstrap/monaco-lazy";
 import {
+  applyMonacoTheme,
   getHoverHighlighter,
   getMonacoDiffEditor,
   refreshHoverLink,
@@ -288,7 +289,16 @@ async function switchView(target: View): Promise<void> {
 }
 
 viewToggleBtn.addEventListener("click", () => void switchView("monaco"));
-gitDiffToggleBtn.addEventListener("click", () => switchView("gitdiff"));
+gitDiffToggleBtn.addEventListener("click", () => void switchView("gitdiff"));
+
+// `<theme-toggle>` dispatches `theme-change` after writing the new value to
+// `documentElement.dataset.theme`. Monaco picks its theme from a function
+// that reads that dataset, but the editor itself only re-applies the theme
+// when it is re-rendered. Without this listener, opening Monaco and then
+// toggling the app theme leaves Monaco frozen on its first-render theme.
+document.addEventListener("theme-change", () => {
+  void applyMonacoTheme();
+});
 
 // ─── Monaco navigation from diff overlays ─────────────────────────────────
 

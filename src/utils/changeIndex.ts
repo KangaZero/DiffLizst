@@ -43,11 +43,18 @@ function childIndexOfKey(key: ChildDiffKey): number {
   return m ? Number.parseInt(m[1], 10) : 0;
 }
 
-/** Extract the tag name segment from a ChildDiffKey. */
+/**
+ * Extract the tag name segment from a ChildDiffKey.
+ *
+ * Keys look like `"${prefix}-${tagName}-${idx}"`. Hyphenated MusicXML tag
+ * names (`work-title`, `part-list`, `score-instrument`, `figured-bass`) are
+ * common, so we cannot just take `split("-")[1]` — it would return `"work"`
+ * instead of `"work-title"`. Match everything between the leading prefix and
+ * the trailing index segment.
+ */
 function tagOfChildKey(key: ChildDiffKey): string {
-  const parts = key.split("-");
-  // ["N", tag, idx] or ["root", tag, idx]
-  return parts[1] ?? "";
+  const m = key.match(/^[^-]+-(.+)-\d+$/);
+  return m ? m[1] : "";
 }
 
 /**
