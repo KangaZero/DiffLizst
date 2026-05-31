@@ -3,14 +3,14 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * Playwright config for the DiffLizst e2e suite.
  *
- * Drives the actual built web app via `bun run preview`, not the dev server,
+ * Drives the actual built web app via `pnpm run preview`, not the dev server,
  * so production-shape bundles are exercised. Base path matches Vite's
  * `base: '/DiffLizst/'` setting.
  *
  * Browser matrix: chromium-only by default. The matrix is structured so
  * adding firefox + webkit later is one line per project.
  *
- * Run locally: `bun run test:e2e:install` once, then `bun run test:e2e`.
+ * Run locally: `pnpm run test:e2e:install` once, then `pnpm run test:e2e`.
  */
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -37,7 +37,7 @@ export default defineConfig({
     // { name: "webkit",   use: { ...devices["Desktop Safari"]   } },
   ],
   webServer: {
-    command: "bun run build && bun run preview --port 4173",
+    command: "pnpm run build && pnpm run preview --port 4173",
     url: "http://localhost:4173/DiffLizst/",
     reuseExistingServer: !process.env.CI,
     // verovio WASM is large; give the build + preview enough headroom.
