@@ -63,6 +63,9 @@ export type DiffSettingsValue = XMLDiffOptions & {
   /** When `true`, diffs each direct child tag within a measure individually
    *  instead of treating the whole measure as one unit. Default: `false`. */
   detailedDiff: boolean;
+  /** When `true`, switches the diff palette from red/green to blue/orange,
+   *  which is distinguishable for deuteranopia and protanopia. Default: `false`. */
+  colorblindPalette: boolean;
 };
 
 /** Default values shown when the component first renders. */
@@ -74,6 +77,7 @@ export const DEFAULT_SETTINGS: DiffSettingsValue = {
   showMiniMap: false,
   gitDiffOrientation: "split",
   detailedDiff: true,
+  colorblindPalette: false,
 };
 
 // Gear icon (Lucide `settings-2` path, MIT licensed)
@@ -108,18 +112,18 @@ template.innerHTML = `
   }
 
   .trigger:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.1));
-    border-color: var(--accent-border, rgba(170,59,255,0.5));
+    background: var(--accent-bg, rgba(155,53,245,0.1));
+    border-color: var(--accent-border, rgba(155,53,245,0.5));
   }
 
   .trigger:focus-visible {
-    outline: 2px solid var(--accent, #aa3bff);
+    outline: 2px solid var(--accent, #9b35f5);
     outline-offset: 2px;
   }
 
   .trigger[aria-expanded="true"] {
-    background: var(--accent-bg, rgba(170,59,255,0.1));
-    border-color: var(--accent-border, rgba(170,59,255,0.5));
+    background: var(--accent-bg, rgba(155,53,245,0.1));
+    border-color: var(--accent-border, rgba(155,53,245,0.5));
   }
 
   .panel {
@@ -160,7 +164,7 @@ template.innerHTML = `
   }
 
   .row:hover {
-    background: var(--accent-bg, rgba(170,59,255,0.05));
+    background: var(--accent-bg, rgba(155,53,245,0.05));
   }
 
   label {
@@ -196,7 +200,7 @@ template.innerHTML = `
   input[type="checkbox"] {
     width: 16px;
     height: 16px;
-    accent-color: var(--accent, #aa3bff);
+    accent-color: var(--accent, #9b35f5);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -249,13 +253,22 @@ template.innerHTML = `
       min-height: 44px;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trigger,
+    .row,
+    summary,
+    .chevron {
+      transition: none;
+    }
+  }
 </style>
 
 <button class="trigger" type="button" aria-label="Diff settings" aria-expanded="false" aria-haspopup="true">
   ${GEAR_SVG}
 </button>
 
-<div class="panel" role="menu" aria-label="Diff settings panel">
+<div class="panel" role="dialog" aria-modal="true" aria-label="Diff settings">
   <div class="panel-header">Diff settings</div>
 
   <div class="row">
@@ -297,6 +310,13 @@ template.innerHTML = `
   </div>
 <div class="row">
     <div class="label-wrap">
+      <label for="colorblind-palette">Colorblind-safe palette</label>
+      <span class="hint">Switches add/remove from green/red to blue/orange (deuteranopia + protanopia friendly)</span>
+    </div>
+    <input id="colorblind-palette" type="checkbox" ${DEFAULT_SETTINGS.colorblindPalette ? "checked" : ""} />
+  </div>
+<div class="row">
+    <div class="label-wrap">
       <label for="git-diff-orientation">Git Diff Orientation</label>
       <span class="hint">Choose the git diff orientation</span>
     </div>
@@ -328,6 +348,7 @@ export class DiffSettings extends HTMLElement {
   private _lineNosInput!: HTMLInputElement;
   private _miniMapInput!: HTMLInputElement;
   private _detailedDiffInput!: HTMLInputElement;
+  private _colorblindPaletteInput!: HTMLInputElement;
   private _gitDiffOrientationSelect!: HTMLSelectElement;
   private _algoSelect!: HTMLSelectElement;
 
@@ -351,6 +372,7 @@ export class DiffSettings extends HTMLElement {
     this._lineNosInput = mustQuery<HTMLInputElement>(root, "#show-line-nos");
     this._miniMapInput = mustQuery<HTMLInputElement>(root, "#show-mini-map");
     this._detailedDiffInput = mustQuery<HTMLInputElement>(root, "#detailed-diff");
+    this._colorblindPaletteInput = mustQuery<HTMLInputElement>(root, "#colorblind-palette");
     this._gitDiffOrientationSelect = mustQuery<HTMLSelectElement>(root, "#git-diff-orientation");
     this._algoSelect = mustQuery<HTMLSelectElement>(root, "#algorithm");
   }
@@ -363,6 +385,7 @@ export class DiffSettings extends HTMLElement {
     this._wsInput.addEventListener("change", () => this._emit());
     this._miniMapInput.addEventListener("change", () => this._emit());
     this._detailedDiffInput.addEventListener("change", () => this._emit());
+    this._colorblindPaletteInput.addEventListener("change", () => this._emit());
     this._algoSelect.addEventListener("change", () => this._emit());
     this._lineNosInput.addEventListener("change", () => this._emit());
     this._gitDiffOrientationSelect.addEventListener("change", () => this._emit());
@@ -388,6 +411,7 @@ export class DiffSettings extends HTMLElement {
     this._miniMapInput.checked = v.showMiniMap;
     this._gitDiffOrientationSelect.value = v.gitDiffOrientation;
     this._detailedDiffInput.checked = v.detailedDiff;
+    this._colorblindPaletteInput.checked = v.colorblindPalette;
   }
 
   /** Current snapshot of all settings. */
@@ -401,6 +425,7 @@ export class DiffSettings extends HTMLElement {
         .value as DiffSettingsValue["gitDiffOrientation"],
       showLineNumbers: this._lineNosInput.checked,
       detailedDiff: this._detailedDiffInput.checked,
+      colorblindPalette: this._colorblindPaletteInput.checked,
     };
   }
 
@@ -410,10 +435,11 @@ export class DiffSettings extends HTMLElement {
     this._trigger.setAttribute("aria-expanded", "true");
   }
 
-  /** Close the settings panel. */
+  /** Close the settings panel and return focus to the trigger button. */
   private _close() {
     this._panel.classList.remove("open");
     this._trigger.setAttribute("aria-expanded", "false");
+    this._trigger.focus();
   }
 
   /** Toggle open/closed state. */

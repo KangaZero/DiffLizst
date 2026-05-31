@@ -21,6 +21,24 @@ import { strFromU8, unzipSync } from "fflate";
 const TEXT_EXTENSIONS = new Set([".xml", ".musicxml"]);
 const ZIP_EXTENSIONS = new Set([".mxl"]);
 
+/**
+ * Upper bound on accepted input file size. 25 MB comfortably fits any
+ * real-world MusicXML (the longest published scores are well under 5 MB
+ * uncompressed; .mxl rarely exceeds 1 MB). Rejecting larger inputs blocks
+ * accidental "drop the wrong file" mistakes and the trivial DoS of pushing
+ * a multi-GB blob through `FileReader.readAsArrayBuffer`.
+ */
+const MAX_INPUT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Upper bound on the total decompressed payload of an `.mxl` archive. Zip
+ * bombs achieve compression ratios of 1000:1 or higher; without this cap, a
+ * crafted 10 MB .mxl could decompress to 10 GB and crash the tab. 50 MB
+ * still allows large scores (Beethoven 9th Symphony ≈ 4 MB; complete Wagner
+ * operas remain under 20 MB).
+ */
+const MAX_DECOMPRESSED_BYTES = 50 * 1024 * 1024;
+
 function fileExtension(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot === -1 ? "" : name.slice(dot).toLowerCase();
@@ -94,6 +112,11 @@ function readAsBytes(file: File): Promise<Uint8Array> {
  * UI can show e.g. `score.mxl` even though the contents have been unzipped.
  */
 export async function loadScoreFile(file: File): Promise<{ xml: string; filename: string }> {
+  if (file.size > MAX_INPUT_BYTES) {
+    throw new Error(
+      `File too large: ${(file.size / 1024 / 1024).toFixed(1)} MB exceeds the ${MAX_INPUT_BYTES / 1024 / 1024} MB limit`,
+    );
+  }
   const ext = fileExtension(file.name);
   if (TEXT_EXTENSIONS.has(ext)) {
     const xml = await readAsText(file);
@@ -102,6 +125,20 @@ export async function loadScoreFile(file: File): Promise<{ xml: string; filename
   if (ZIP_EXTENSIONS.has(ext)) {
     const bytes = await readAsBytes(file);
     const entries = unzipSync(bytes);
+    // Zip-bomb guard: sum the uncompressed sizes BEFORE decoding any payload
+    // to a string. fflate returns Uint8Array views that already hold the
+    // decompressed bytes, so the spike in memory has already happened —
+    // but rejecting here at least prevents the subsequent strFromU8 +
+    // DOMParser passes from compounding the damage.
+    let total = 0;
+    for (const name of Object.keys(entries)) {
+      total += entries[name].length;
+      if (total > MAX_DECOMPRESSED_BYTES) {
+        throw new Error(
+          `Decompressed archive exceeds ${MAX_DECOMPRESSED_BYTES / 1024 / 1024} MB — refused as potential zip bomb`,
+        );
+      }
+    }
     const rootPath = findRootMusicXMLPath(entries);
     if (!rootPath) {
       throw new Error(`No MusicXML rootfile found inside ${file.name}`);

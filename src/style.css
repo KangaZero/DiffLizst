@@ -13,7 +13,6 @@
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-  --theme-toggle-shift: 0px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -112,6 +111,10 @@
   --z-modal: 300;
   --z-toast: 400;
 
+  /* Muted text — 5.38:1 on white ✓ WCAG AA. Used for gutter / line-number columns
+   * instead of opacity so the ratio is theme-stable and screen-reader visible. */
+  --text-muted: #767083;
+
   /* Status/semantic colors — contrast-audited for WCAG AA on white (light) */
   /* #15803d = green-700: 5.02:1 on white ✓ */
   --color-success: #15803d;
@@ -141,7 +144,8 @@
   --social-bg: rgba(47, 48, 58, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  --theme-toggle-shift: 24px;
+  /* 6.21:1 on #16171d ✓ WCAG AA */
+  --text-muted: #a1a1aa;
   /* #f87171 = red-400: 6.46:1 on dark bg ✓, 5.86:1 on code-bg ✓ (was #ef4444: 4.31 on code-bg FAIL) */
   --notation-diff-remove: #f87171;
   --notation-diff-remove-bg: rgba(248, 113, 113, 0.12);
@@ -180,7 +184,7 @@
     --social-bg: rgba(47, 48, 58, 0.5);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-    --theme-toggle-shift: 24px;
+    --text-muted: #a1a1aa;
     --notation-diff-remove: #f87171;
     --notation-diff-remove-bg: rgba(248, 113, 113, 0.12);
     --notation-diff-add: #22c55e;
@@ -250,13 +254,13 @@ h2 {
 }
 
 h1 {
-  font-size: 56px;
+  font-size: var(--font-size-2xl);
   letter-spacing: -1.68px;
-  margin: 32px 0;
+  margin: var(--space-8) 0;
 
   @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+    font-size: var(--font-size-xl);
+    margin: var(--space-5) 0;
   }
 }
 
@@ -270,13 +274,13 @@ h1.app-title {
 }
 
 h2 {
-  font-size: 24px;
+  font-size: var(--font-size-lg);
   line-height: 118%;
   letter-spacing: -0.24px;
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
 
   @media (max-width: 1024px) {
-    font-size: 20px;
+    font-size: var(--font-size-md);
   }
 }
 
@@ -284,140 +288,18 @@ p {
   margin: 0;
 }
 
-code,
-.counter {
+code {
   font-family: var(--mono);
   display: inline-flex;
   border-radius: 4px;
   color: var(--text-h);
-}
-
-code {
   font-size: 15px;
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
 }
 
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
 
-  &:hover {
-    border-color: var(--accent-border);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-}
-
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 14px 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg) 76%, var(--social-bg));
-  color: var(--text-h);
-  box-shadow: var(--shadow);
-  cursor: pointer;
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    background-color 0.2s ease;
-}
-
-.theme-toggle:hover {
-  transform: translateY(-1px);
-  border-color: var(--accent-border);
-}
-
-.theme-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-
-.theme-toggle-track {
-  width: 56px;
-  height: 32px;
-  padding: 4px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  background: light-dark(rgba(8, 6, 13, 0.1), rgba(255, 255, 255, 0.14));
-  box-sizing: border-box;
-}
-
-.theme-toggle-thumb {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #facc15, #fb7185);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-  translate: var(--theme-toggle-shift) 0;
-  transition:
-    translate 0.25s ease,
-    rotate 0.25s ease,
-    background 0.25s ease;
-}
-
-:root[data-theme='dark'] .theme-toggle-thumb {
-  rotate: 180deg;
-  background: linear-gradient(135deg, #c084fc, #60a5fa);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .theme-toggle-thumb {
-    rotate: 180deg;
-    background: linear-gradient(135deg, #c084fc, #60a5fa);
-  }
-}
-
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg) scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg) scale(0.8);
-  }
-}
 
 #app {
   max-width: 100%;
@@ -455,12 +337,6 @@ code {
     @media (max-width: 1024px) {
       padding: 24px 20px;
     }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
   }
 
   @media (max-width: 1024px) {
@@ -561,7 +437,7 @@ code {
 }
 
 .diff-summary-count--change {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--accent);
 }
 
@@ -653,7 +529,7 @@ code {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   font-family: var(--mono);
   flex-shrink: 0;
@@ -670,7 +546,7 @@ code {
 }
 
 .diff-summary-item--change .diff-summary-item-type {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--accent);
 }
 
@@ -680,6 +556,118 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ─── Score statistics block (inside diff summary sidebar) ─────────────── */
+
+.score-stats-details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.score-stats-summary {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-h);
+  cursor: pointer;
+  list-style: none;
+  padding: var(--space-1) 0;
+  user-select: none;
+}
+
+/* Remove default marker cross-browser */
+.score-stats-summary::-webkit-details-marker {
+  display: none;
+}
+
+.score-stats-summary::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: var(--space-2);
+  font-size: 10px;
+  transition: transform var(--duration-fast);
+  color: var(--text-muted);
+}
+
+.score-stats-details[open] .score-stats-summary::before {
+  transform: rotate(90deg);
+}
+
+.score-stats-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.score-stats-body {
+  padding-top: var(--space-2);
+}
+
+.score-stats-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.score-stats-side {
+  min-width: 0;
+}
+
+.score-stats-filename {
+  font-size: var(--font-size-xs);
+  font-family: var(--mono);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0 0 var(--space-1);
+}
+
+.score-stats-filename--left {
+  color: var(--notation-diff-remove);
+}
+
+.score-stats-filename--right {
+  color: var(--notation-diff-add);
+}
+
+.score-stats-dl {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.score-stats-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.score-stats-term {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.score-stats-def {
+  font-size: var(--font-size-xs);
+  font-family: var(--mono);
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .score-stats-summary::before {
+    transition: none;
+  }
 }
 
 .notation-panel {
@@ -769,6 +757,8 @@ code {
 
 .notation-stage {
   position: relative;
+  /* Mobile + stacked layouts: take whatever width the column allows, up to a
+     comfortable 720px cap. */
   width: min(100%, 720px);
   /* Reserve vertical space so the "Loading score…" placeholder doesn't shift
      by ~2300px when Verovio paints — keeps CLS ≈ 0. */
@@ -781,6 +771,16 @@ code {
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   box-sizing: border-box;
+}
+
+/* From `md` upward, when the side-by-side layout is in play, cap each score
+   pane at 30 % of the viewport so the two panes + sidebar leave breathing
+   room around the toolbar centre. Horizontal scroll inside the stage takes
+   over once Verovio renders wider than 30 vw at the active scale. */
+@media (min-width: 768px) {
+  .notation-stage {
+    width: min(100%, 30vw);
+  }
 }
 
 /* ─── Diff overlays ──────────────────────────────── */
@@ -947,14 +947,15 @@ code {
   color: var(--text);
 }
 
-/* Line-number gutter columns — used in both tooltip and diff page */
+/* Line-number gutter columns — used in both tooltip and diff page.
+ * --text-muted (#767083 light / #a1a1aa dark) replaces opacity so the computed
+ * colour passes WCAG AA 4.5:1 in both themes regardless of background. */
 .diff-line-no {
   display: inline-block;
   min-width: 3ch;
   text-align: right;
   padding-right: 6px;
-  color: var(--text);
-  opacity: 0.4;
+  color: var(--text-muted, #767083);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
@@ -1186,11 +1187,24 @@ code {
 }
 
 .diff-page-file-header .diff-file-old {
-  color: var(--notation-diff-remove);
+  /* #b91c1c = red-700: 5.98:1 on #f4f3ec (code-bg) ✓ WCAG AA at 12px.
+   * var(--notation-diff-remove) = #dc2626 gives only 4.34:1 on code-bg — fail. */
+  color: #b91c1c;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Dark themes override: #f87171 (6.46:1 on dark code-bg) inherits from the theme token */
+:root[data-theme='dark'] .diff-page-file-header .diff-file-old {
+  color: var(--notation-diff-remove);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .diff-page-file-header .diff-file-old {
+    color: var(--notation-diff-remove);
+  }
 }
 
 .diff-page-file-header .diff-file-new {
@@ -1238,9 +1252,6 @@ code {
   width: 0 !important;
 }
 
-#single-editor-container {
-  flex: 1
-}
 
 /* ─── Git diff page (hunked HTML view) ──────────────────────────── */
 
@@ -1319,8 +1330,7 @@ code {
   text-align: center;
   padding: 0 var(--space-2);
   user-select: none;
-  color: var(--text);
-  opacity: 0.5;
+  color: var(--text-muted, #767083);
 }
 
 .diff-page-gutter.diff-line-no {
@@ -1328,7 +1338,6 @@ code {
   width: auto;
   text-align: right;
   padding-right: 6px;
-  opacity: 0.4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1416,55 +1425,6 @@ code {
   width: 100%;
 }
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
-}
 
 #spacer {
   height: 88px;
@@ -1739,6 +1699,10 @@ code {
     min-height: 44px;
   }
 
+  .measure-jump-input {
+    min-height: 44px;
+  }
+
   /* Score loader and diff-settings are inside Shadow DOM; their coarse-pointer
    * rules live in each component's own <style> block (WCAG 2.2 SC 2.5.8). */
 }
@@ -1750,15 +1714,15 @@ code {
     transition: none;
   }
 
-  .theme-toggle-thumb {
-    transition: none;
-  }
-
   .diff-summary-chevron {
     transition: none;
   }
 
   .skip-link {
+    transition: none;
+  }
+
+  .measure-jump-input {
     transition: none;
   }
 }
@@ -1778,3 +1742,369 @@ code {
  * Light: #dc2626 (4.83:1 on white ✓). Dark: #f87171 (5.86:1 on code-bg ✓) */
 
 /* .diff-summary-count--change uses var(--accent) which is now #9b35f5 (4.97:1) ✓ */
+
+/* ─── Palette: colorblind-safe ──────────────────────────────────────────── */
+/* Replaces red/green with blue-600/orange-600 — safe for deuteranopia and
+ * protanopia (~8 % of men). Amber-600 is retained for "change" because it
+ * reads correctly in both red-green CVD models.
+ *
+ * Contrast values (WCAG AA threshold 4.5:1 for text, 3:1 for UI):
+ *   blue-600  #2563eb  → 5.40:1 on white ✓  /  on add-bg ≈4.2:1 ✓ (UI)
+ *   orange-600 #ea580c → 3.02:1 on white ✓ (UI boundary; text on bg ≈2.5, acceptable for large overlay patches)
+ *   amber-600 #d97706  → same as default change colour, already audited above
+ */
+
+:root[data-palette="colorblind"] {
+  --notation-diff-add: #2563eb;
+  --notation-diff-add-bg: rgba(37, 99, 235, 0.12);
+  --notation-diff-remove: #ea580c;
+  --notation-diff-remove-bg: rgba(234, 88, 12, 0.12);
+  --notation-diff-change: #d97706;
+  --notation-diff-change-bg: rgba(217, 119, 6, 0.12);
+}
+
+/* Dark-theme companion: blue-400/orange-400 improve contrast on dark backgrounds.
+ * blue-400  #60a5fa → 6.18:1 on #16171d ✓
+ * orange-400 #fb923c → 5.26:1 on #16171d ✓ */
+:root[data-theme="dark"][data-palette="colorblind"] {
+  --notation-diff-add: #60a5fa;
+  --notation-diff-add-bg: rgba(96, 165, 250, 0.12);
+  --notation-diff-remove: #fb923c;
+  --notation-diff-remove-bg: rgba(251, 146, 60, 0.12);
+  --notation-diff-change: #f59e0b;
+  --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+}
+
+/* Prefers-color-scheme dark companion (for users without an explicit data-theme). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme])[data-palette="colorblind"] {
+    --notation-diff-add: #60a5fa;
+    --notation-diff-add-bg: rgba(96, 165, 250, 0.12);
+    --notation-diff-remove: #fb923c;
+    --notation-diff-remove-bg: rgba(251, 146, 60, 0.12);
+    --notation-diff-change: #f59e0b;
+    --notation-diff-change-bg: rgba(245, 158, 11, 0.12);
+  }
+}
+
+/* ─── Notation splitter ─── */
+
+#next-steps > #docs {
+  flex: var(--notation-pane-1-flex, 1) 0 0;
+  min-width: 0;
+}
+
+#next-steps > #social {
+  flex: var(--notation-pane-2-flex, 1) 0 0;
+  min-width: 0;
+}
+
+.notation-splitter {
+  flex: 0 0 6px;
+  align-self: stretch;
+  cursor: col-resize;
+  background: var(--border);
+  position: relative;
+  transition: background var(--duration-fast);
+  /* Invisible until hovered/focused so it doesn't visually crowd the border. */
+  opacity: 0.4;
+}
+
+.notation-splitter:hover,
+.notation-splitter:focus-visible {
+  opacity: 1;
+  background: var(--accent-border);
+  outline: none;
+}
+
+.notation-splitter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.notation-splitter--dragging {
+  background: var(--accent);
+  opacity: 1;
+}
+
+/* 44px touch hit-area via pseudo-element — coarse-pointer only */
+@media (pointer: coarse) {
+  .notation-splitter {
+    flex-basis: 12px;
+  }
+
+  .notation-splitter::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline: -16px;
+  }
+}
+
+/* Hide splitter and restore natural flex when viewport stacks panes */
+@media (max-width: 900px) {
+  .notation-splitter {
+    display: none;
+  }
+
+  #next-steps > #docs,
+  #next-steps > #social {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notation-splitter {
+    transition: none;
+  }
+}
+
+/* ─── Print stylesheet ───────────────────────────────────────────────────── */
+
+@media print {
+  /* Landscape A4 with tight margins so two score panes fit side-by-side. */
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  /* Strip all chrome: toolbar, footer, sidebar, and the skip-link are
+   * screen-only affordances with no meaning on paper. !important is needed
+   * because the screen rules set display/position values that would otherwise
+   * win over a plain override in the print context. */
+  header#toolbar,
+  footer.app-footer,
+  .diff-summary,
+  .skip-link {
+    display: none !important;
+  }
+
+  /* Hover-only UI — pointless on paper. */
+  #diff-tooltip {
+    display: none !important;
+  }
+
+  /* Change-navigation buttons are interactive controls; inactive in print. */
+  .change-nav-btn,
+  .toolbar-center {
+    display: none !important;
+  }
+
+  /* Bleach all backgrounds to white and force ink to black — avoids toner
+   * waste and the dark-theme color bleed that occurs when the browser
+   * captures computed dark-mode styles for printing. !important is needed
+   * because every background/color declaration on screen uses variables that
+   * resolve to non-white values. */
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Keep the stage border so the two panes remain visually distinct on the
+   * printed page — the only screen box decoration worth preserving in print. */
+  .notation-stage {
+    border: 1px solid black !important;
+    /* Auto width + 48 vw cap lets two panes sit side-by-side on landscape A4.
+     * Drop min-height so blank vertical space isn't reserved when scores
+     * render short — avoids a wasteful half-empty page. */
+    width: auto !important;
+    max-width: 48vw !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  /* Re-introduce overlay visibility using patterns/outlines instead of color
+   * so the diff survives black-and-white printing and is colorblind-safe. */
+  .diff-overlay--change {
+    background: rgba(0, 0, 0, 0.05) !important;
+    outline: 2px solid black !important;
+  }
+
+  .diff-overlay--add {
+    background: rgba(0, 0, 0, 0.05) !important;
+    /* Dashed outline distinguishes add from change at a glance. */
+    outline: 2px dashed black !important;
+  }
+
+  .diff-overlay--remove {
+    background: rgba(0, 0, 0, 0.05) !important;
+    outline: 2px dotted black !important;
+  }
+
+  /* Avoid splitting a measure's notation across a page break — a partial
+   * measure on a page tear is unreadable for a score reviewer. */
+  g.measure {
+    break-inside: avoid;
+  }
+
+  /* Printed legend — explains the outline patterns so the PDF is
+   * self-contained and readable without the colour tooltip context.
+   * `position: fixed` in print CSS anchors to the page margin area,
+   * not the scrollport, so it lands at the bottom of every printed page. */
+  body::after {
+    content: "Overlay patterns: solid border = changed, dashed = added, dotted = removed";
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 8px;
+    font-size: 9pt;
+    border-top: 1px solid black;
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* ─── Measure jump ─── */
+
+.measure-jump-input {
+  width: 48px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-h);
+  font-family: var(--mono);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  /* Remove browser default spinner arrows — the field is still type=number
+   * for inputmode="numeric" on iOS; visual arrows add clutter in a tiny control. */
+  appearance: textfield;
+}
+
+.measure-jump-input::-webkit-outer-spin-button,
+.measure-jump-input::-webkit-inner-spin-button {
+  appearance: none;
+}
+
+.measure-jump-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent-border);
+}
+
+.measure-jump-input--error {
+  border-color: var(--color-danger, #dc2626);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+/* Error toast */
+#measure-jump-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger, #dc2626);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+  z-index: var(--z-toast);
+}
+
+#measure-jump-toast.measure-jump-toast--visible {
+  opacity: 1;
+}
+
+/* Hide behind icon on narrow viewports */
+@media (max-width: 600px) {
+  .measure-jump-input {
+    display: none;
+  }
+}
+
+/* ─── Annotation markers and sidebar add button ─────────────────────────── */
+
+/* Small accent-coloured dot pinned to the top-right corner of the measure
+ * overlay area. Only shown when at least one annotation exists.
+ * 8px diameter, accent colour for both light and dark themes. */
+.annotation-marker {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  opacity: 0.85;
+  z-index: var(--z-overlay);
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
+}
+
+.annotation-marker:hover {
+  opacity: 1;
+  transform: scale(1.4);
+}
+
+.annotation-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .annotation-marker {
+    transition: none;
+  }
+}
+
+/* "+" button appended to diff summary sidebar rows for annotatable measures */
+.annotation-add-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.diff-summary-item:hover .annotation-add-btn,
+.annotation-add-btn:focus-visible {
+  opacity: 1;
+}
+
+.annotation-add-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.annotation-add-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .annotation-add-btn {
+    opacity: 1;
+    min-width: 28px;
+    min-height: 28px;
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media print {
+  .annotation-marker,
+  .annotation-add-btn {
+    display: none !important;
+  }
+}

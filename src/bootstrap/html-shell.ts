@@ -40,6 +40,16 @@ export const APP_HTML = `
       </svg>
     </button>
     <span id="change-counter" class="change-nav-counter" aria-live="polite" aria-atomic="true">0 of 0</span>
+    <input
+      id="measure-jump-input"
+      class="measure-jump-input"
+      type="number"
+      min="1"
+      inputmode="numeric"
+      placeholder="#"
+      aria-label="Jump to measure number"
+      title="Jump to measure (press Enter)"
+    />
     <button id="next-change" class="change-nav-btn" type="button" aria-label="Next change (j or ArrowDown)" title="Next change (j / ArrowDown)" disabled>
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m9 18 6-6-6-6"/>
@@ -52,6 +62,11 @@ export const APP_HTML = `
     </button>
   </nav>
   <div class="toolbar-end">
+    <button id="print-btn" class="view-toggle-btn" type="button" aria-label="Print or save as PDF" title="Print or save as PDF (Ctrl+P)">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+      </svg>
+    </button>
     <diff-settings></diff-settings>
     <theme-toggle></theme-toggle>
   </div>
@@ -91,6 +106,14 @@ export const APP_HTML = `
       <div id="XML-notation" class="notation-stage" role="region" aria-label="Score 1 notation">Loading score…</div>
     </div>
   </div>
+  <div
+    id="notation-splitter"
+    class="notation-splitter"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize notation panes"
+    tabindex="0"
+  ></div>
   <div id="social">
     <div class="notation-panel">
       <div class="notation-controls individual-controls">

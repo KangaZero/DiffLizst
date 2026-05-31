@@ -691,6 +691,112 @@ test.describe("Within-note diff tooltip summary", () => {
   });
 });
 
+// ─── Colorblind-safe palette toggle ───────────────────────────────────────
+
+test.describe("Colorblind-safe palette toggle", () => {
+  test("checking the colorblind toggle sets data-palette=colorblind and changes overlay background", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Record the computed background of the first add overlay before toggling.
+    const bgBefore = await page.evaluate(() => {
+      const overlay = document.querySelector<HTMLDivElement>(".diff-overlay--add");
+      if (!overlay) return "";
+      return getComputedStyle(overlay).backgroundColor;
+    });
+
+    // Open the settings panel and check the colorblind toggle.
+    await page.locator("diff-settings").evaluate((el: Element) => {
+      const shadow = el.shadowRoot;
+      if (!shadow) throw new Error("Shadow root not found");
+      const trigger = shadow.querySelector<HTMLButtonElement>(".trigger");
+      trigger?.click();
+    });
+
+    await page.locator("diff-settings").evaluate((el: Element) => {
+      const shadow = el.shadowRoot;
+      if (!shadow) throw new Error("Shadow root not found");
+      const checkbox = shadow.querySelector<HTMLInputElement>("#colorblind-palette");
+      if (!checkbox) throw new Error("Colorblind palette checkbox not found");
+      checkbox.click();
+    });
+
+    // data-palette must be "colorblind" after the settings-change event fires.
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "colorblind", {
+      timeout: 3_000,
+    });
+
+    // The computed background of an add overlay must differ from the default green.
+    const bgAfter = await page.evaluate(() => {
+      const overlay = document.querySelector<HTMLDivElement>(".diff-overlay--add");
+      if (!overlay) return "";
+      return getComputedStyle(overlay).backgroundColor;
+    });
+
+    expect(bgAfter).not.toBe(bgBefore);
+  });
+});
+
+// ─── Measure-jump input ────────────────────────────────────────────────────
+
+test.describe("Measure-jump input", () => {
+  test("entering a valid measure number keeps the score visible and shows no toast", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    const input = page.locator("#measure-jump-input");
+    await expect(input).toBeVisible({ timeout: 5_000 });
+
+    await input.fill("1");
+    await input.press("Enter");
+
+    // Score must still be rendered (no crash from the jump).
+    await expect(page.locator(`${NOTATION} svg`).first()).toBeVisible({ timeout: 5_000 });
+    // No error toast for a valid measure.
+    const toast = page.locator("#measure-jump-toast");
+    const toastExists = await toast.count();
+    if (toastExists > 0) {
+      await expect(toast).not.toHaveClass(/measure-jump-toast--visible/);
+    }
+  });
+
+  test("entering an out-of-range measure number shows an error toast", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    const input = page.locator("#measure-jump-input");
+    await input.fill("99999");
+    await input.press("Enter");
+
+    const toast = page.locator("#measure-jump-toast");
+    await expect(toast).toHaveClass(/measure-jump-toast--visible/, { timeout: 5_000 });
+    const text = await toast.textContent();
+    expect((text ?? "").length).toBeGreaterThan(0);
+  });
+
+  test("pressing Enter on an empty input is a no-op — no toast", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+
+    const input = page.locator("#measure-jump-input");
+    await input.fill("");
+    await input.press("Enter");
+
+    const toast = page.locator("#measure-jump-toast");
+    const toastExists = await toast.count();
+    if (toastExists > 0) {
+      await expect(toast).not.toHaveClass(/measure-jump-toast--visible/);
+    }
+  });
+});
+
 // ─── Hover-link: overlay hover highlights Monaco lines ────────────────────
 
 test.describe("Hover-link bidirectional highlight", () => {
@@ -745,5 +851,145 @@ test.describe("Hover-link bidirectional highlight", () => {
     );
 
     expect(hadDecoration).toBe(true);
+  });
+});
+
+// ─── Notation splitter ────────────────────────────────────────────────────
+
+test.describe("Notation splitter", () => {
+  test("splitter is keyboard-focusable, ArrowRight changes pane-1 width, ratio persists across reload", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+
+    // Splitter must be in the DOM with the required ARIA attributes.
+    const splitter = page.locator("#notation-splitter");
+    await expect(splitter).toBeAttached({ timeout: 5_000 });
+    await expect(splitter).toHaveAttribute("role", "separator");
+    await expect(splitter).toHaveAttribute("aria-orientation", "vertical");
+    await expect(splitter).toHaveAttribute("tabindex", "0");
+
+    // Only run the interaction test on a viewport where the splitter is visible
+    // (>900px). The test runner uses the default Playwright viewport (1280×720).
+    const viewportWidth = page.viewportSize()?.width ?? 0;
+    if (viewportWidth <= 900) {
+      // Skip the interaction assertions on narrow viewports — splitter is hidden.
+      return;
+    }
+
+    // Read the initial --notation-pane-1-flex value from the container.
+    const flexBefore = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("#next-steps");
+      return el?.style.getPropertyValue("--notation-pane-1-flex") ?? "";
+    });
+
+    // Focus the splitter and press ArrowRight — should widen pane-1.
+    await splitter.focus();
+    await page.keyboard.press("ArrowRight");
+
+    const flexAfter = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("#next-steps");
+      return el?.style.getPropertyValue("--notation-pane-1-flex") ?? "";
+    });
+
+    // The flex value must have changed.
+    expect(flexAfter).not.toBe(flexBefore);
+    expect(Number(flexAfter)).toBeGreaterThan(Number(flexBefore));
+
+    // The ratio must be persisted to localStorage.
+    const stored = await page.evaluate(
+      () => localStorage.getItem("difflizst.splitter.ratio") ?? "",
+    );
+    expect(stored).not.toBe("");
+    expect(Number(stored)).toBeGreaterThan(0);
+    expect(Number(stored)).toBeLessThan(1);
+
+    // Navigate away and back — the ratio must be restored.
+    const storedRatio = stored;
+    await page.reload();
+    await waitForBothScores(page);
+
+    const flexAfterReload = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("#next-steps");
+      return el?.style.getPropertyValue("--notation-pane-1-flex") ?? "";
+    });
+
+    expect(Number(flexAfterReload)).toBeCloseTo(Number(storedRatio), 5);
+  });
+});
+
+// ─── Print stylesheet ──────────────────────────────────────────────────────
+
+test.describe("Print stylesheet", () => {
+  test("toolbar is hidden in print media", async ({ page }) => {
+    await page.goto("/");
+    await page.emulateMedia({ media: "print" });
+
+    const toolbar = page.locator("header#toolbar");
+    await expect(toolbar).toBeHidden();
+  });
+});
+
+// ─── Annotation system ────────────────────────────────────────────────────
+
+test.describe("Annotation system", () => {
+  test("adding an annotation on a measure shows the marker, which persists on reload and disappears on delete", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Find a diff-summary row that has an annotation "+" button (a measure-level change).
+    const addBtn = page.locator(".annotation-add-btn").first();
+    await expect(addBtn).toBeAttached({ timeout: 10_000 });
+
+    // Open the popover via the "+" button.
+    await addBtn.scrollIntoViewIfNeeded();
+    await addBtn.click({ force: true });
+
+    // Popover should be visible — scoped to the annotation-manager shadow root.
+    const mgr = page.locator("annotation-manager");
+    await expect(mgr).toBeAttached({ timeout: 5_000 });
+
+    const textarea = mgr.locator("textarea#ann-textarea");
+    await expect(textarea).toBeAttached({ timeout: 5_000 });
+
+    // Type a note and save.
+    await textarea.fill("test annotation note");
+    const saveBtn = mgr.locator("#ann-save");
+    await saveBtn.click();
+
+    // An annotation marker dot should now appear on the notation stage.
+    await expect(page.locator(".annotation-marker").first()).toBeAttached({ timeout: 5_000 });
+
+    // Reload the page — the annotation marker should still be present (persisted in localStorage).
+    await page.reload();
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+    await expect(page.locator(".annotation-marker").first()).toBeAttached({ timeout: 10_000 });
+
+    // Open the popover for that measure via the marker.
+    const marker = page.locator(".annotation-marker").first();
+    await marker.click();
+
+    // The popover should list the saved annotation.
+    const annotationText = mgr.locator(".annotation-item-text").first();
+    await expect(annotationText).toHaveText("test annotation note", { timeout: 5_000 });
+
+    // Delete the annotation.
+    const deleteBtn = mgr.locator(".btn-delete").first();
+    await deleteBtn.click();
+
+    // After deletion the list should show the empty state.
+    await expect(mgr.locator(".empty-note")).toBeVisible({ timeout: 3_000 });
+
+    // Close the popover.
+    const cancelBtn = mgr.locator("#ann-cancel");
+    await cancelBtn.click();
+
+    // The marker should be gone from the page.
+    await expect(page.locator(".annotation-marker")).toHaveCount(0, { timeout: 5_000 });
   });
 });

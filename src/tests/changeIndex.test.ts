@@ -52,6 +52,21 @@ describe("flattenChanges", () => {
     expect(labels).toEqual(["measure 1", "measure 3", "measure 5"]);
   });
 
+  it("sorts root children by their full hyphenated tag name, not the first segment", () => {
+    // Regression for an earlier `split("-")[1]` bug that truncated
+    // "work-title" → "work", "part-group" → "part", etc. Two real
+    // MusicXML root-child tags differ ONLY past the first hyphen —
+    // `work-title` vs `work-number`. The sort key must preserve the
+    // full tag so the sidebar ordering is deterministic.
+    const r = emptyResult();
+    r.children.set("root-work-title-0" as ChildDiffKey, makeDiff("score · work-title"));
+    r.children.set("root-work-number-0" as ChildDiffKey, makeDiff("score · work-number"));
+    const labels = flattenChanges(r).map((e) => e.diff.label);
+    // work-number sorts before work-title alphabetically — confirms the
+    // full tag is being compared, not just "work".
+    expect(labels).toEqual(["score · work-number", "score · work-title"]);
+  });
+
   it("places measure children directly after their parent measure", () => {
     const r = emptyResult();
     r.measures.set(1, makeDiff("measure 1"));

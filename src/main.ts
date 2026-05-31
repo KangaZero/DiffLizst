@@ -9,8 +9,10 @@ import * as verovio from "verovio";
 import { renderGitDiffPage, wireGitDiffSplitToggle } from "@/bootstrap/git-diff-page";
 import { wireOverlayToMonaco } from "@/bootstrap/hover-link";
 import { APP_HTML } from "@/bootstrap/html-shell";
+import { wireMeasureJump } from "@/bootstrap/measure-jump";
 import { loadMonaco } from "@/bootstrap/monaco-lazy";
 import {
+  applyMonacoTheme,
   getHoverHighlighter,
   getMonacoDiffEditor,
   refreshHoverLink,
@@ -28,12 +30,15 @@ import {
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
 import { wireScrollSync } from "@/bootstrap/scroll-sync";
+import { wireSplitter } from "@/bootstrap/splitter";
+import { type AnnotationManager, diffKeyFor } from "@/components/annotations";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap, getOverlayRecords } from "@/utils/applyDiffHighlights";
 import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 import { loadScoreFile } from "@/utils/loadScoreFile";
+import { computeScoreStats } from "@/utils/scoreStats";
 import { setNotationSVGIDToIndexBase } from "@/utils/setNotationSVGIDToIndexBase";
 import {
   DEFAULT_SETTINGS,
@@ -105,6 +110,8 @@ const diffSummaryMobileCloseBtn = document.querySelector<HTMLButtonElement>(
 )!;
 const diffSummaryOpenBtn = document.querySelector<HTMLButtonElement>("#toolbar-summary-open");
 const swapScoresBtn = document.querySelector<HTMLButtonElement>("#swap-scores")!;
+const printBtn = document.querySelector<HTMLButtonElement>("#print-btn");
+const measureJumpInput = document.querySelector<HTMLInputElement>("#measure-jump-input")!;
 
 if (
   !notationContainer ||
@@ -131,12 +138,21 @@ if (
   !changeCounterEl ||
   !diffSummaryAside ||
   !diffSummaryMobileCloseBtn ||
-  !swapScoresBtn
+  !swapScoresBtn ||
+  !measureJumpInput
 ) {
   throw new Error("Required app elements not found in DOM");
 }
 
 wireScrollSync(notationContainer, notationContainer2);
+
+// ─── Splitter ──────────────────────────────────────────────────────────────
+
+const splitterEl = document.querySelector<HTMLElement>("#notation-splitter");
+const nextStepsEl = document.querySelector<HTMLElement>("#next-steps");
+if (splitterEl && nextStepsEl) {
+  wireSplitter({ container: nextStepsEl, splitter: splitterEl });
+}
 
 // ─── Pagination components ─────────────────────────────────────────────────
 
@@ -171,6 +187,15 @@ const state: NotationState = {
 };
 
 const containers: [HTMLDivElement, HTMLDivElement] = [notationContainer, notationContainer2];
+
+// ─── Annotation manager ────────────────────────────────────────────────────
+
+const annotationMgr = document.createElement("annotation-manager") as AnnotationManager;
+document.body.appendChild(annotationMgr);
+
+annotationMgr.addEventListener("annotations-change", () => {
+  annotationMgr.refresh(containers);
+});
 
 // ─── Hover-link wiring ─────────────────────────────────────────────────────
 // Overlay → Monaco and Monaco → overlay listeners are rebuilt after every
@@ -284,7 +309,16 @@ async function switchView(target: View): Promise<void> {
 }
 
 viewToggleBtn.addEventListener("click", () => void switchView("monaco"));
-gitDiffToggleBtn.addEventListener("click", () => switchView("gitdiff"));
+gitDiffToggleBtn.addEventListener("click", () => void switchView("gitdiff"));
+
+// `<theme-toggle>` dispatches `theme-change` after writing the new value to
+// `documentElement.dataset.theme`. Monaco picks its theme from a function
+// that reads that dataset, but the editor itself only re-applies the theme
+// when it is re-rendered. Without this listener, opening Monaco and then
+// toggling the app theme leaves Monaco frozen on its first-render theme.
+document.addEventListener("theme-change", () => {
+  void applyMonacoTheme();
+});
 
 // ─── Monaco navigation from diff overlays ─────────────────────────────────
 
@@ -415,6 +449,9 @@ function openSidebarOverlay(): void {
 function closeSidebarOverlay(): void {
   delete diffSummaryAside.dataset.mobileOpen;
   diffSummaryAside.setAttribute("aria-hidden", "true");
+  // Restore focus to whichever button opened the overlay — without this
+  // focus is dropped to <body> and keyboard users lose their place.
+  diffSummaryOpenBtn?.focus();
 }
 
 diffSummaryMobileCloseBtn.addEventListener("click", closeSidebarOverlay);
@@ -467,7 +504,54 @@ function refreshChangeNav(): void {
   nextChangeBtn.disabled = currentChanges.length === 0;
   swapScoresBtn.disabled = !state.originalXML || !state.xMLToCompare;
   diffSummary.refresh(currentChanges);
+
+  const filename1 =
+    document.querySelector<HTMLElement>(".diff-file-old")?.textContent?.trim() ?? "Score 1";
+  const filename2 =
+    document.querySelector<HTMLElement>(".diff-file-new")?.textContent?.trim() ?? "Score 2";
+
+  diffSummary.refreshStats(
+    state.originalXML ? { stats: computeScoreStats(state.originalXML), filename: filename1 } : null,
+    state.xMLToCompare
+      ? { stats: computeScoreStats(state.xMLToCompare), filename: filename2 }
+      : null,
+  );
+
   enrichOverlays(containers);
+
+  const leftId = filename1 || "score-1";
+  const rightId = filename2 || "score-2";
+  annotationMgr.diffKey = diffKeyFor(leftId, rightId);
+  annotationMgr.refresh(containers);
+  addAnnotationButtons();
+}
+
+/**
+ * Append a "+" annotation button to each diff summary list item that has a
+ * measure number. Runs after `diffSummary.refresh()` so the list is populated.
+ * Buttons are idempotent — existing ones are not duplicated.
+ */
+function addAnnotationButtons(): void {
+  const list = diffSummaryAside.querySelector<HTMLOListElement>("#diff-summary-list");
+  if (!list) return;
+  for (const li of list.querySelectorAll<HTMLLIElement>("li[data-change-id]")) {
+    if (li.querySelector(".annotation-add-btn")) continue;
+    const changeId = li.dataset.changeId;
+    const entry = currentChanges.find((c) => c.id === changeId);
+    if (!entry?.measureNumber) continue;
+    const measure = entry.measureNumber;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "annotation-add-btn";
+    btn.setAttribute("aria-label", `Add annotation to measure ${measure}`);
+    btn.title = `Add annotation to measure ${measure}`;
+    btn.textContent = "+";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      annotationMgr.openForMeasure(measure, btn);
+    });
+    li.appendChild(btn);
+  }
 }
 
 function updateChangeCounter(): void {
@@ -559,6 +643,16 @@ swapScoresBtn.addEventListener("click", () => {
   if (activeView === "gitdiff") renderGitDiffPage(state.xmlDiff, gitDiffHunksEl, currentSettings);
 });
 
+printBtn?.addEventListener("click", () => window.print());
+
+// ─── Measure-jump wiring ───────────────────────────────────────────────────
+
+wireMeasureJump(measureJumpInput, {
+  state,
+  containers,
+  paginations: [paginationEl, paginationEl2],
+});
+
 wireEditToggle(diffEditToggleBtn);
 
 wireGitDiffSplitToggle(
@@ -612,6 +706,9 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
   const isSplit = currentSettings.gitDiffOrientation === "split";
   gitDiffSplitToggleBtn.setAttribute("aria-pressed", String(isSplit));
   gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
+  document.documentElement.dataset.palette = currentSettings.colorblindPalette
+    ? "colorblind"
+    : "default";
   runDiff(state, containers, currentSettings);
   refreshChangeNav();
   if (activeView === "monaco") {
@@ -624,6 +721,11 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
         currentSettings,
         monacoCallbacks,
       );
+      // Settings changes (palette, line-numbers, minimap, etc.) trigger a
+      // Monaco re-render that recreates internal models. The overlay-→-Monaco
+      // hover bridge needs to be re-pointed at the fresh editor instance,
+      // otherwise hovering an overlay no longer highlights its Monaco line.
+      refreshHoverLink(getOverlayRecords);
     });
   }
 });

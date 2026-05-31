@@ -5,6 +5,7 @@ import {
   type OverlayRecord,
   wireMonacoToOverlay,
 } from "@/bootstrap/hover-link";
+import { loadMonaco } from "@/bootstrap/monaco-lazy";
 import type { DiffSettingsValue } from "@/components/diffSettings";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -61,6 +62,19 @@ export function getMonacoTheme(): string {
  */
 export function getMonacoDiffEditor(): Monaco.editor.IStandaloneDiffEditor | null {
   return monacoDiffEditor;
+}
+
+/**
+ * Re-apply the theme on the global Monaco namespace IF Monaco has been
+ * loaded. No-op when Monaco hasn't been imported yet — there's nothing to
+ * theme. Called from `main.ts` in response to the `theme-change` CustomEvent
+ * dispatched by `<theme-toggle>`. Without this hook the Monaco editor stayed
+ * frozen on its first-render theme while the rest of the UI switched.
+ */
+export async function applyMonacoTheme(): Promise<void> {
+  if (!monacoDiffEditor) return;
+  const monaco = await loadMonaco();
+  monaco.editor.setTheme(getMonacoTheme());
 }
 
 // ─── Hover-link public API ────────────────────────────────────────────────────

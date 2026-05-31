@@ -76,3 +76,253 @@ extracting `diffElementList` helper from `diffXML.ts`, moving
 Keep as-is: `WeakMap` tooltip cache, `NotationState` context object,
 `escapeHTML` consistency, CI workflow structure, fixture smoke suite,
 `fakeToolkit` test pattern, `MonacoCallbacks` inversion.
+
+---
+
+## Test-coverage gap analysis — 2026-05-31T00:00:00Z
+
+### Coverage table
+
+| Source file | Unit | Integration | E2E | Verdict |
+|---|---|---|---|---|
+| `src/utils/diffXML.ts` | Strong — 11 unit scenarios + 12-case option matrix | Yes — real-fixture cross product | Via diff-flow.spec and features.spec | **GOOD** — see branch gaps below |
+| `src/utils/changeIndex.ts` | Good — 9 unit cases covering ordering, child placement, id stability, counts | None | None | **ACCEPTABLE** — logic is simple; gaps minor |
+| `src/utils/applyDiffHighlights.ts` | Partial — only `buildMeasureIdMap` + `buildChildIdMap` pure helpers; `createOverlay`, tooltip rendering, `positionTooltip` untested by units | None | Yes (overlay visible/hover/tooltip in features.spec) | **RISK** — core render path is e2e-only |
+| `src/utils/loadScoreFile.ts` | None — no unit test file exists | None | `.mxl` happy path covered by features.spec `.mxl` test | **RISK** — error paths entirely uncovered |
+| `src/utils/diffXML.ts` — `summariseNoteDiff` | Excellent — 14 unit cases covering all fields, multi-change, absent fields, rest | None | Checked opportunistically by e2e tooltip test | **GOOD** |
+| `src/bootstrap/scroll-sync.ts` | Good — 8 unit cases covering proportional sync, suppress, dataset-off, dispose, NaN guards | None | **None** — no e2e scroll event | **GAP** |
+| `src/bootstrap/hover-link.ts` | Partial — `lineRangeFor` + `buildLineToOverlayLookup` unit-tested; `wireMonacoToOverlay`, `wireOverlayToMonaco`, `createMonacoHighlighter` have no unit tests | None | Overlay→Monaco direction tested in features.spec "Hover-link bidirectional" | **GAP** — Monaco→overlay direction asserted only at DOM-class level |
+| `src/bootstrap/monaco-lazy.ts` | None | None | Monaco editor mount tested implicitly by diff-flow.spec "monaco view toggle" | **GAP** — promise caching, error path, `MonacoEnvironment` config untested |
+| `src/bootstrap/notation-pipeline.ts` | None | None | `swapScores` exercised by features.spec swap tests; `reloadScore`/`runDiff` via upload tests | **PARTIAL** — `rescale`, `renderNotation`, `reapplyDiff`, `updateScaleOutput` unit-untested |
+| `src/bootstrap/git-diff-page.ts` | None | None | Toggle/hunk render by diff-flow.spec; split mode toggle by diff-flow.spec | **PARTIAL** — `escapeHTML`, `splitHunkHTML`, `splitCellHTML`, `unifiedHunkHTML` have no unit tests |
+| `src/bootstrap/monaco-page.ts` | None | None | `renderCodeDiffPage`, `wireEditToggle` implicitly by diff-flow; `refreshHoverLink` never explicitly tested | **GAP** |
+| `src/components/diffSettings/index.ts` | None | None | Shadow-DOM `ctx-lines` interaction by diff-flow.spec "diff settings change"; other inputs not exercised | **GAP** |
+| `src/components/diffSummary/index.ts` | None | None | Sidebar visible/count/toggle/click by features.spec | **ACCEPTABLE** — pure wiring, simple logic |
+| `src/components/fileDrop/index.ts` | None | None | drag-drop dragenter+drop by features.spec | **ACCEPTABLE** — tested via contract |
+| `src/components/scoreLoader/index.ts` | None | None | `score-load` event implicitly fired on boot | **GAP** — sample picker UI path not explicitly exercised |
+| `src/components/notation/note/index.ts` | None | None | None identified | **UNKNOWN** |
+| `src/components/pages/index.ts` | None | None | Page-turn implicitly via scale slider tests | **GAP** |
+| `src/components/themeToggle/index.ts` | None | None | None — theme switch not exercised in any spec | **GAP** |
+| `src/main.ts` | None | None | Boot + full flow by diff-flow.spec; upload/nav/sidebar/swap by features.spec | **PARTIAL** — ~200 LOC wiring code untouched: `labelToSearchTerm`, `navigateMonacoToDiff`, `enrichOverlays`, `focusChange` detail |
+
+---
+
+### Top 10 most valuable test cases to add
+
+**1. Empty XML string passed to `diffXML`** (`src/utils/diffXML.ts:682`)
+
+Neither `""` nor `"   "` is tested as either argument. DOMParser with `""` returns a parseerror document — the current code will call `querySelectorAll("measure")` on an error document and return empty maps, but this is never asserted. A malformed input could also produce an error-document root element whose `querySelectorAll` silently yields zero results rather than throwing. Add a unit test: `diffXML("", validXml, opts)` and `diffXML("", "", opts)` — assert either empty maps are returned or a known error is thrown consistently.
+
+**2. Multi-field note diff with detailedDiff on** (`src/utils/diffXML.ts:695`, `src/utils/diffXML.ts:347-349`)
+
+The integration suite enables `detailedDiff: true` and counts non-zero children, but no test asserts that a changed `<note>` with both a pitch change AND a duration change produces an `ElementDiff` with `summary` containing exactly 2 entries. The `summariseNoteDiff` unit suite tests the walker in isolation, but the end-to-end path through `elementDiff` → `summary` assignment (line 348) is only tested incidentally at the e2e level. Add a unit test using a synthetic 2-note fixture.
+
+**3. `<credit>` removal — singleSideDiff for credits** (`src/utils/diffXML.ts:651`)
+
+The `singleSideDiff` path for credits is reachable when xml1 has N credits and xml2 has N-1. No existing test constructs this scenario. The measure-removal case is tested (diffXML.test.ts:168), but credits are matched by positional index and the removal path is not covered. Add: xml1 with 2 `<credit>` elements, xml2 with 1. Assert `result.credits.size === 1` and `result.credits.get(1)!.changeType === "remove"`.
+
+**4. `loadScoreFile` error paths** (`src/utils/loadScoreFile.ts:36-55, 112`)
+
+Three error branches have zero coverage:
+- Unsupported extension (line 112): `loadScoreFile(new File([], "score.abc"))` — assert rejects with "Unsupported file extension".
+- Malformed `.mxl` (non-zip bytes): `loadScoreFile(new File([new Uint8Array([0,1,2])], "score.mxl"))` — assert rejects (fflate throws).
+- Valid zip but no rootfile (line 105-107): zip with only `"junk.txt"` inside — assert rejects with "No MusicXML rootfile found".
+None of these are covered by the e2e `.mxl` test which only exercises the happy path.
+
+**5. Identical multi-part score — zero changes** (`src/utils/diffXML.ts:709-721`)
+
+The integration suite tests `diffXML(xml, xml, opts)` with real fixtures and asserts zero total changes. But those fixtures are single-part scores from the Chopin/Rachmaninoff set. A synthetic 2-part score diffed against itself would exercise the `querySelectorAll("measure")` loop across multiple `<part>` elements. In a multi-part score all measures from all parts are collected together; a bug in measure numbering across parts would only appear here. Add a unit test with a 2-part fixture where both parts have measures 1-3.
+
+**6. `<measure>` insertion non-contiguous** (`src/utils/diffXML.ts:709-721`)
+
+The "added measure" test in diffXML.test.ts (line 158) appends measure 3 as the last measure. No test covers a scenario where measure 2 is added between existing measures 1 and 3 — i.e. xml1 has measures 1, 3, 4 and xml2 has measures 1, 2, 3, 4. The measure-number-keyed matching should handle this correctly (measure 2 appears only in xml2, keyed by `number` attribute), but it's untested. Add: assert `result.measures.get(2)!.changeType === "add"` and `result.measures.has(3)` is false (measure 3 is identical).
+
+**7. Scroll sync e2e — real scroll event drives notation sync** (`src/bootstrap/scroll-sync.ts:15`)
+
+The 8 unit tests cover the math and suppress logic thoroughly, but no e2e test dispatches a real `scroll` event on `#XML-notation` and asserts that `#XML-notation-compare` has a non-zero `scrollLeft`. The rAF tick is real in a browser, making unit tests with a synchronous shim insufficient to catch timing bugs in the double-rAF suppress pattern. Add a Playwright test: set a score with many measures (use a large Chopin fixture), resize the container so content overflows, programmatically set `notationContainer.scrollLeft = 300`, dispatch a `scroll` event, wait one animation frame, assert `notationContainer2.scrollLeft > 0`.
+
+**8. `refreshHoverLink` / Monaco→overlay direction unit test** (`src/bootstrap/hover-link.ts:186-248`)
+
+`wireMonacoToOverlay` is untested at the unit level. The e2e "Hover-link bidirectional" test fires `mouseenter` on an overlay (overlay→Monaco direction) and checks for a `.diff-line--hover-link` decoration. The reverse direction — hovering a Monaco line toggles `.diff-overlay--hover-link` on the matching overlay — is never explicitly asserted. The e2e test was written only for overlay→Monaco. Add a Playwright test that opens Monaco, simulates a `mousemove` event on the original editor pane at a line covered by a known diff, and asserts `.diff-overlay--hover-link` is present on the DOM.
+
+**9. `renderGitDiffPage` with split orientation** (`src/bootstrap/git-diff-page.ts:128`)
+
+The e2e test "git-diff view toggle reveals hunks" only verifies `#git-diff-hunks` is non-empty. The `splitHunkHTML` and `unifiedHunkHTML` HTML-building functions have no unit tests at all. `splitHunkHTML` has a non-trivial row-pairing loop (lines 75-89) that pairs consecutive remove/add runs — this could silently produce misaligned rows if an add-only or remove-only run appears without a counterpart. Add unit tests for `splitHunkHTML` and `unifiedHunkHTML` with synthetic `ElementDiff` inputs: assert output contains `diff-hunk-header`, correct glyph characters, and that `splitHunkHTML` produces `diff-split-row` entries.
+
+**10. Theme toggle during diff — overlay colors update** (`src/components/themeToggle/index.ts`)
+
+No test — unit or e2e — exercises theme switching. The theme toggle modifies `document.documentElement.dataset.theme`, which is also read by `getMonacoTheme()` in monaco-page.ts (line 55) and drives overlay CSS custom properties. A regression here (e.g. Monaco keeping vs-light after a dark-mode switch) would be invisible to the test suite. Add an e2e test: load default scores, click the `<theme-toggle>` button, assert `document.documentElement.dataset.theme === "dark"`, then open Monaco view and assert `monaco.editor.getTheme()` (accessible via `window.monaco` if exposed, or check for `.vs-dark` class on the container).
+
+---
+
+### Anti-patterns spotted in existing tests
+
+1. **`features.spec.ts:648-675` — soft assertion with silent fallback.** The tooltip-summary test contains an `if (found.hasSummary) { ... } else { ... }` branch: if no note-level overlay is found on page 1, the test falls back to asserting only that the tooltip body is visible. This means the `hasSummary: true` branch can go unexercised indefinitely if the Chopin fixture changes pagination. The test documents this fallback in a comment but doesn't fail when the more specific assertion is skipped. Either make the note-level check unconditional by using a fixture guaranteed to produce a note-level diff on page 1, or split into two tests with explicit fixture control.
+
+2. **`diffXML.integration.test.ts:83-104` — loop-generated `it()` bodies are opaque on failure.** The 12-case option matrix generates test names like `Op10No1 vs Op10No2 produces non-zero diff (ctx=0 ws=true detailed=true)`. Every case only asserts `totalChanges(result) > 0`. A single test failure tells you _a combination_ failed but not _which map_ (measures vs credits vs children) was empty. The matrix has value as a regression guard but the signal is too coarse. Add one targeted case per option dimension change instead of the full 3×2×2 cross product.
+
+3. **`changeIndex.test.ts:100-108` — IIFE fixture construction inside `it()`.** The `countByChangeType` test builds its `XMLDiffResult` using an immediately-invoked function expression inside the `it()` call: `flattenChanges((() => { ... })())`. This is hard to read and makes the fixture invisible to a quick scan of `describe` + `it`. Extract into a named factory call like the rest of the file.
+
+4. **`hoverLink.test.ts` — no test for the `change` diff side ambiguity.** `lineRangeFor` with `side = "original"` on a `changeType: "change"` diff uses context lines (which have `oldLineNo`) but the `highlight` function in `createMonacoHighlighter` (hover-link.ts:105) unconditionally maps `changeType === "remove"` to `"original"` and anything else to `"modified"`. A `changeType: "change"` diff is always sent to the modified pane. No test asserts this — the unit tests for `lineRangeFor` cover the "change" diff line types correctly but never test the `createMonacoHighlighter` routing decision.
+
+5. **`applyDiffHighlights.test.ts` — `buildChildIdMap` test ignores measures without `n` attribute** (`applyDiffHighlights.test.ts:128-139`). The test asserts `map.has("orphan-note") === false`, which is correct. But it doesn't assert what _does_ happen when a later measure does have an `n` attribute — the test uses a fixture with only one measure. A multi-measure fixture where one measure is anonymous and another is numbered would better pin the skip-and-continue behaviour.
+
+---
+
+**High-value gaps total: 10**
+
+**Estimated effort:**
+- Items 1, 3, 5, 6: ~30 min each (pure unit tests, no browser required).
+- Items 2, 4: ~45 min each (unit tests + small synthetic fixtures with multi-field diffs).
+- Item 7 (scroll sync e2e): ~1.5 h (requires overflow setup, timing coordination).
+- Item 8 (Monaco→overlay e2e): ~1.5 h (requires Monaco to be open and synthetic mousemove).
+- Item 9 (git-diff-page unit): ~45 min.
+- Item 10 (theme e2e): ~1 h (requires Monaco API surface exposure or class-based assertion).
+
+**Total: ~9 h of focused test writing to close the highest-risk gaps.**
+
+---
+
+## Diff-engine correctness audit — 2026-05-31T12:00:00Z
+
+Scope: `diffXML.ts`, `applyDiffHighlights.ts`, `changeIndex.ts`, `summariseNoteDiff` (inline in diffXML.ts), `setNotationSVGIDToIndexBase.ts`, `getTotalPageCount.ts`, `xmlIdSeedMap.ts`, `loadScoreFile.ts`. Branch: `refactor/diff-and-tests` HEAD `03f7309`.
+
+### CRITICAL
+
+**C1. `diffXML.ts:712-713` — `querySelectorAll("measure")` collects measures from ALL `<part>` blocks; `map1.set(num, m)` overwrites on every duplicate measure number.**
+
+Severity: **CRITICAL — silent wrong output for any multi-part score.**
+
+In a MusicXML file with N parts (e.g. `osmd_gounod_meditation.xml` has 5 parts, 73 measures each), `querySelectorAll("measure")` returns 365 elements. The `keyOf` function extracts the `number` attribute (1–73), so `map1.set(1, el)` is called five times — once per part — and the final entry is P5's measure 1 DOM element. Meanwhile `sliceElement(xml1, '<measure number="1"', '</measure>', 0)` finds the _first_ occurrence of that pattern, which is P1's measure 1 raw text. `elementDiff` is then called with P5's DOM element and P1's raw string — a cross-part mismatch that produces spurious diffs between different instruments on the same bar number.
+
+The self-diff smoke test (`fixtures-smoke.test.ts`) does NOT catch this because both `map1` and `map2` overwrite with the same last part's element — the comparison is still P5 vs P5, which is identical. No existing test compares two _different_ multi-part scores; all integration tests use single-part Chopin/Rachmaninoff fixtures.
+
+Minimal reproducer:
+```xml
+<!-- score1.xml -->
+<score-partwise>
+  <part id="P1"><measure number="1"><note><pitch><step>C</step></pitch></note></measure></part>
+  <part id="P2"><measure number="1"><note><pitch><step>E</step></pitch></note></measure></part>
+</score-partwise>
+```
+Diff this against `score2.xml` (same but P1 measure 1 has `<step>D</step>`). The diff engine compares P2's measure 1 vs P2's measure 1 (both unchanged) and reports no diff — missing P1's change.
+
+Fix direction: scope `querySelectorAll` to `doc1.querySelector("part")!.querySelectorAll("measure")` (first part only, to match the convention that score differences are compared voice-by-voice), OR switch the key to `"${partId}-${measureNum}"` so each part gets separate map entries. The `openPattern` and `occurrence` logic must change correspondingly.
+
+---
+
+### MAJOR
+
+**M1. `diffXML.ts:279` — `sliceElement` uses a naive `indexOf` for the closing tag, not a depth-counted search.**
+
+If any measure's content contains the literal string `</measure>` inside a text node, CDATA section, or comment (e.g. a `<words>` element with raw XML-like text), `sliceElement` terminates at that inner occurrence and returns a truncated raw string. The DOM element used in `elementDiff` is correct; only the raw-string fallback is wrong. In practice, real-world MusicXML scores never embed `</measure>` as text content, and DOMParser would reject a literal `</measure>` in text context anyway. Risk is low but the function has no depth counter and this is a latent correctness hole.
+
+**M2. `diffXML.ts:244-255` — `findLineOffset` returns `0` for both "element found at line 0" and "element not found".**
+
+When the search string is not present in the XML, `findLineOffset` returns 0, which is indistinguishable from "found at line 0." The caller in `diffElementList` (line 643-654) passes the returned offset to `elementDiff` and `singleSideDiff` as absolute file-line offsets. If an element's opening tag is absent from the raw string (impossible when the DOM element was parsed from that same string, but possible if the `openPattern` for a credit or part-list differs from what the raw XML contains), the line numbers in the tooltip will be wrong — all lines shown as starting at line 1 — rather than triggering any error. This is latent: no test covers the "not found" branch, and the ambiguity is undocumented.
+
+**M3. `changeIndex.ts:47-51` — `tagOfChildKey` splits on `-` and takes `parts[1]`, truncating hyphenated MusicXML tag names.**
+
+```ts
+function tagOfChildKey(key: ChildDiffKey): string {
+  const parts = key.split("-");
+  return parts[1] ?? "";  // BUG
+}
+```
+
+For a key like `"root-work-title-0"`, `split("-")` yields `["root", "work", "title", "0"]` and `parts[1]` returns `"work"` instead of `"work-title"`. The same truncation applies to any measure-level key with a hyphenated tag: `"1-figured-bass-0"` → tag is `"figured"` instead of `"figured-bass"`. This corrupts the sort order of root-level children in `flattenChanges`, producing non-deterministic navigation order when hyphenated tags are present. Affected tags include `work-title`, `work-number`, `part-list`, `score-part`, `part-name`, `score-instrument`, `part-group`, and `figured-bass`.
+
+The `changeIndex.test.ts:40` test adds `"root-work-title-0"` to children but only checks that the `source` field is `"rootChild"` — it does not assert the sort position relative to other root children, so the bug is not caught.
+
+Fix direction: parse the tag as everything between the first `-` separator and the last `-N` numeric suffix:
+```ts
+const m = key.match(/^[^-]+-(.+)-\d+$/);
+return m?.[1] ?? "";
+```
+
+**M4. `loadScoreFile.ts:104` — no decompressed-size limit before `unzipSync`.**
+
+`fflate.unzipSync` fully decompresses the archive into memory before returning. A crafted `.mxl` file (zip bomb) with a high compression ratio can expand to gigabytes and crash the browser tab. There is no check on `file.size` before decompression and no check on the length of the resulting `Uint8Array`. A 10 MB upload could decompress to well over 1 GB.
+
+Fix direction: add a pre-check on `file.size` (e.g. reject if `> 20 MB`) and a post-check on the decompressed byte total across all entries before calling `strFromU8`.
+
+**M5. `diffXML.ts:645-646` — `sliceElement` returns `""` (not `undefined`) when the element is not found, making `useRaw = true` despite an empty slice.**
+
+```ts
+const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, open, closeTag, occ);
+const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, open, closeTag, occ);
+const d = elementDiff(e1, e2, label, opts, o1, o2, r1, r2);
+```
+
+If `sliceElement` cannot find `openSearch` in `xml1`, it returns `""`. In `elementDiff` at line 310:
+```ts
+const useRaw = !opts.ignoreWhitespace && rawStr1 !== undefined && rawStr2 !== undefined;
+```
+`""` is not `undefined`, so `useRaw` becomes `true` and `s1 = ""`. `diffLines([], ...)` then produces a full "all-added" diff showing the entire element as new content. In practice this case requires `DOMParser` to have produced an element that the original raw string no longer contains verbatim (e.g. due to encoding normalisation or a `<?xml?>` processing instruction), so risk is low but the silent wrong-output path is real. `sliceElement` should return `null | string` and the call site should treat `null` as "not found."
+
+---
+
+### MINOR (advisory)
+
+**m1. `main.ts:502` — `setTimeout(..., 1700)` pulse animation leaks stale timers when the user loops back to the same overlay before the timer fires.**
+
+Each `focusChange` call at line 502 fires a new `setTimeout` referencing the specific `overlay` element. If the user clicks next/next fast enough to cycle back to the same change (e.g. in a score with 2 changes), the stale timer from the first visit fires after 1700 ms and removes `diff-overlay--focus` from the overlay that is now correctly focused again. The DOM clear at line 494-496 only removes the class at the time of the next click, not from future timers. Result: the active overlay's focus highlight disappears prematurely.
+
+Fix direction: track a monotonic click counter or use an `AbortController`-style token to cancel superseded timers.
+
+**m2. `xmlIdSeedMap.ts:1-3` — exported constant is never imported anywhere.**
+
+`xmlIdSeedMap` is exported from `src/utils/xmlIdSeedMap.ts` but has zero import sites across the entire codebase. It is dead code.
+
+**m3. `setNotationSVGIDToIndexBase.ts:21` — end-of-file commented-out CSS is dead code.**
+
+The line is a 700-character commented-out CSS block (Verovio-generated element styles). It is not referenced anywhere and has no explanatory comment. Remove it; the `style.css` reference in the comment on line 18 is sufficient.
+
+**m4. `applyDiffHighlights.ts:257-273` — `buildChildIdMap` uses `querySelectorAll("measure")` on MEI, which has one `<measure>` per bar (all staves combined). This is NOT the same bug as C1 (MusicXML). MEI structure correctly avoids the overwrite. Acknowledged OK.**
+
+**m5. No test covers `diffXML` with two different multi-part scores.** The smoke suite self-diffs multi-part fixtures (which masks the C1 bug). A cross-file test with two different 2-part scores is needed. See C1.
+
+---
+
+### Things that look fine — do not change
+
+- **LCS edge cases** (empty arrays, single element, all-same, all-different): `buildLCSTable` initialises a `(m+1)×(n+1)` table starting at 0. `diffLines` loop condition `while (i > 0 || j > 0)` handles `m=0 or n=0` correctly — neither branch executes for `i=j=0`. All edge cases are handled correctly.
+
+- **`trimContext` boundary handling**: `Math.max(0, idx - context)` and `Math.min(lines.length - 1, idx + context)` correctly clamp expansion at both edges. No off-by-one.
+
+- **`elementDiff` with `ignoreWhitespace=false` and one raw string missing**: the call sites in `diffElementList` (lines 645-646) set both `r1` and `r2` simultaneously using the same `opts.ignoreWhitespace` flag — you cannot get one defined and the other undefined through normal call paths.
+
+- **`diffChildrenByTag` empty-input**: `els1=[], els2=[]` → `allTags` is empty → no iterations → no-op. `els1=[], els2=[<note/>]` → `g1=[], g2=[note]` → `singleSideDiff` called for note. Both cases correct.
+
+- **`formatPitch` with non-numeric `alter`**: non-numeric `alterStr` makes `Number(alterStr)` return `NaN`. `NaN === 0` is false, so all integer branches miss, and the final `else` branch renders `"(alterStr)"` (e.g. `"C(foo)4"`). Not ideal but not a crash. `Number()` is used (not `parseInt`), so the original question about `parseInt("foo")` does not apply to the actual code.
+
+- **`lyric` handling**: `childText(lyric, "text")` correctly reads the `<text>` child's `textContent`, not the whole `<lyric>` element's whitespace-mixed content.
+
+- **`tie`/`slur` handling**: absent from `NOTE_FIELDS` by design. They appear only in the raw XML diff lines, not the semantic summary. This is a deliberate scope limitation, not a bug.
+
+- **`part-group` / `part-link` pattern collision**: `openPattern` for part-lists is `"<part-list>"` (with closing `>`), and the querySelectorAll is `"part-list"` — neither matches `<part-link>` or `<part-group>`. No collision.
+
+- **`findRootMusicXMLPath` in `loadScoreFile`**: correctly reads `META-INF/container.xml` manifest first and only falls back to the first `.xml/.musicxml` entry if the manifest is absent or unparseable (older Sibelius exports). This matches the MusicXML spec.
+
+- **Zip-slip**: `fflate.unzipSync` returns entries as an in-memory `Record<string, Uint8Array>`. Nothing is written to the filesystem. Path traversal strings in entry names have no effect.
+
+- **`applyDiffHighlights` re-application idempotency**: `.querySelectorAll(".diff-overlay")` removal before re-adding is correct. Third-party `.diff-overlay` elements would be incorrectly removed, but this is an unlikely enough scenario to be advisory only.
+
+- **Overlay positioning after scroll**: overlays use `containerRect` + `container.scrollLeft` at creation time (lines 194-195). Since overlays are `position: absolute` children of the container, they move with scroll. Correct.
+
+- **`buildMeasureIdMap` multi-part MEI**: MEI has exactly one `<measure>` element per bar (all staves/parts share the same measure element). `querySelectorAll("measure")` returns 73 elements for a 73-bar score regardless of how many parts it has. No overwrite. Correct.
+
+- **Change navigation cycling**: `(currentChangeIdx + 1) % currentChanges.length` and `(currentChangeIdx - 1 + currentChanges.length) % currentChanges.length` (main.ts:511,515) correctly wrap at both boundaries.
+
+- **`flattenChanges` ordering determinism**: all maps are sorted explicitly before iteration. Deterministic regardless of insertion order.
+
+---
+
+### Counts
+
+| Severity | Count |
+|---|---|
+| Critical | 1 (C1: multi-part measure overwrite) |
+| Major | 5 (M1–M5) |
+| Minor | 3 (m1–m3) |
+| Acknowledged OK | 14 items explicitly verified |

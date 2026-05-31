@@ -12,6 +12,12 @@ let monacoPromise: Promise<typeof Monaco> | null = null;
 export function loadMonaco(): Promise<typeof Monaco> {
   if (monacoPromise) return monacoPromise;
 
+  // Wrap the import in a .catch that clears the cache on failure — without
+  // this, a transient network error on first open (offline, slow PWA SW
+  // install, blocked CDN) would poison the cache: every subsequent call
+  // would return the same rejected promise and the user would be stuck
+  // until they reloaded the page. Clearing on rejection means the next
+  // call retries cleanly.
   monacoPromise = (async () => {
     const [{ default: EditorWorker }, monaco] = await Promise.all([
       import("monaco-editor/esm/vs/editor/editor.worker?worker"),
@@ -25,7 +31,10 @@ export function loadMonaco(): Promise<typeof Monaco> {
     };
 
     return monaco;
-  })();
+  })().catch((err: unknown) => {
+    monacoPromise = null;
+    throw err;
+  });
 
   return monacoPromise;
 }
