@@ -106,6 +106,14 @@ export const APP_HTML = `
       <div id="XML-notation" class="notation-stage" role="region" aria-label="Score 1 notation">Loading score…</div>
     </div>
   </div>
+  <div
+    id="notation-splitter"
+    class="notation-splitter"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize notation panes"
+    tabindex="0"
+  ></div>
   <div id="social">
     <div class="notation-panel">
       <div class="notation-controls individual-controls">

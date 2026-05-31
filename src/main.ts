@@ -30,6 +30,7 @@ import {
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
 import { wireScrollSync } from "@/bootstrap/scroll-sync";
+import { wireSplitter } from "@/bootstrap/splitter";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap, getOverlayRecords } from "@/utils/applyDiffHighlights";
@@ -142,6 +143,14 @@ if (
 }
 
 wireScrollSync(notationContainer, notationContainer2);
+
+// ─── Splitter ──────────────────────────────────────────────────────────────
+
+const splitterEl = document.querySelector<HTMLElement>("#notation-splitter");
+const nextStepsEl = document.querySelector<HTMLElement>("#next-steps");
+if (splitterEl && nextStepsEl) {
+  wireSplitter({ container: nextStepsEl, splitter: splitterEl });
+}
 
 // ─── Pagination components ─────────────────────────────────────────────────
 

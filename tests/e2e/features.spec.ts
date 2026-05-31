@@ -854,6 +854,71 @@ test.describe("Hover-link bidirectional highlight", () => {
   });
 });
 
+// ─── Notation splitter ────────────────────────────────────────────────────
+
+test.describe("Notation splitter", () => {
+  test("splitter is keyboard-focusable, ArrowRight changes pane-1 width, ratio persists across reload", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+
+    // Splitter must be in the DOM with the required ARIA attributes.
+    const splitter = page.locator("#notation-splitter");
+    await expect(splitter).toBeAttached({ timeout: 5_000 });
+    await expect(splitter).toHaveAttribute("role", "separator");
+    await expect(splitter).toHaveAttribute("aria-orientation", "vertical");
+    await expect(splitter).toHaveAttribute("tabindex", "0");
+
+    // Only run the interaction test on a viewport where the splitter is visible
+    // (>900px). The test runner uses the default Playwright viewport (1280×720).
+    const viewportWidth = page.viewportSize()?.width ?? 0;
+    if (viewportWidth <= 900) {
+      // Skip the interaction assertions on narrow viewports — splitter is hidden.
+      return;
+    }
+
+    // Read the initial --notation-pane-1-flex value from the container.
+    const flexBefore = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("#next-steps");
+      return el?.style.getPropertyValue("--notation-pane-1-flex") ?? "";
+    });
+
+    // Focus the splitter and press ArrowRight — should widen pane-1.
+    await splitter.focus();
+    await page.keyboard.press("ArrowRight");
+
+    const flexAfter = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("#next-steps");
+      return el?.style.getPropertyValue("--notation-pane-1-flex") ?? "";
+    });
+
+    // The flex value must have changed.
+    expect(flexAfter).not.toBe(flexBefore);
+    expect(Number(flexAfter)).toBeGreaterThan(Number(flexBefore));
+
+    // The ratio must be persisted to localStorage.
+    const stored = await page.evaluate(
+      () => localStorage.getItem("difflizst.splitter.ratio") ?? "",
+    );
+    expect(stored).not.toBe("");
+    expect(Number(stored)).toBeGreaterThan(0);
+    expect(Number(stored)).toBeLessThan(1);
+
+    // Navigate away and back — the ratio must be restored.
+    const storedRatio = stored;
+    await page.reload();
+    await waitForBothScores(page);
+
+    const flexAfterReload = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("#next-steps");
+      return el?.style.getPropertyValue("--notation-pane-1-flex") ?? "";
+    });
+
+    expect(Number(flexAfterReload)).toBeCloseTo(Number(storedRatio), 5);
+  });
+});
+
 // ─── Print stylesheet ──────────────────────────────────────────────────────
 
 test.describe("Print stylesheet", () => {
