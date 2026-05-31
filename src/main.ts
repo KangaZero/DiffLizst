@@ -9,6 +9,7 @@ import * as verovio from "verovio";
 import { renderGitDiffPage, wireGitDiffSplitToggle } from "@/bootstrap/git-diff-page";
 import { wireOverlayToMonaco } from "@/bootstrap/hover-link";
 import { APP_HTML } from "@/bootstrap/html-shell";
+import { wireMeasureJump } from "@/bootstrap/measure-jump";
 import { loadMonaco } from "@/bootstrap/monaco-lazy";
 import {
   getHoverHighlighter,
@@ -27,7 +28,6 @@ import {
   swapScores,
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
-import { wireMeasureJump } from "@/bootstrap/measure-jump";
 import { wireScrollSync } from "@/bootstrap/scroll-sync";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";

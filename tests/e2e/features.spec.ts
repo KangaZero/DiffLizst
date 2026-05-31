@@ -740,6 +740,63 @@ test.describe("Colorblind-safe palette toggle", () => {
   });
 });
 
+// ─── Measure-jump input ────────────────────────────────────────────────────
+
+test.describe("Measure-jump input", () => {
+  test("entering a valid measure number keeps the score visible and shows no toast", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    const input = page.locator("#measure-jump-input");
+    await expect(input).toBeVisible({ timeout: 5_000 });
+
+    await input.fill("1");
+    await input.press("Enter");
+
+    // Score must still be rendered (no crash from the jump).
+    await expect(page.locator(`${NOTATION} svg`).first()).toBeVisible({ timeout: 5_000 });
+    // No error toast for a valid measure.
+    const toast = page.locator("#measure-jump-toast");
+    const toastExists = await toast.count();
+    if (toastExists > 0) {
+      await expect(toast).not.toHaveClass(/measure-jump-toast--visible/);
+    }
+  });
+
+  test("entering an out-of-range measure number shows an error toast", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    const input = page.locator("#measure-jump-input");
+    await input.fill("99999");
+    await input.press("Enter");
+
+    const toast = page.locator("#measure-jump-toast");
+    await expect(toast).toHaveClass(/measure-jump-toast--visible/, { timeout: 5_000 });
+    const text = await toast.textContent();
+    expect((text ?? "").length).toBeGreaterThan(0);
+  });
+
+  test("pressing Enter on an empty input is a no-op — no toast", async ({ page }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+
+    const input = page.locator("#measure-jump-input");
+    await input.fill("");
+    await input.press("Enter");
+
+    const toast = page.locator("#measure-jump-toast");
+    const toastExists = await toast.count();
+    if (toastExists > 0) {
+      await expect(toast).not.toHaveClass(/measure-jump-toast--visible/);
+    }
+  });
+});
+
 // ─── Hover-link: overlay hover highlights Monaco lines ────────────────────
 
 test.describe("Hover-link bidirectional highlight", () => {
