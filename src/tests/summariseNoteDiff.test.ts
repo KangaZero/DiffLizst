@@ -5,7 +5,7 @@
  * Run with: bun test src/tests/summariseNoteDiff.test.ts
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { summariseNoteDiff } from "@/utils/diffXML";
 
 /**

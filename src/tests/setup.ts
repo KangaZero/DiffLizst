@@ -1,8 +1,8 @@
 /**
- * Bun test environment setup — polyfills browser DOM APIs that diffXML.ts needs.
- * Loaded automatically via bunfig.toml [test].preload before any test file runs.
+ * Vitest environment setup — polyfills browser DOM APIs that diffXML.ts needs.
+ * Applied globally via vitest.config.ts before any test file runs.
  *
- * linkedom is the go-to lightweight DOM implementation for Node/Bun environments.
+ * linkedom is the go-to lightweight DOM implementation for Node environments.
  * It supports the full CSS selector API (querySelectorAll) and XMLSerializer-
  * compatible serialisation via element.toString(), unlike @xmldom/xmldom which
  * lacks querySelectorAll.

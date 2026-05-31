@@ -9,13 +9,14 @@
  * Run with: `bun test src/tests/diffXML.integration.test.ts`
  */
 
-import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { diffXML, type XMLDiffOptions, type XMLDiffResult } from "@/utils/diffXML";
 
 // ─── Fixture loading ──────────────────────────────────────────────────────
 
 const loadFixture = (path: string): Promise<string> =>
-  Bun.file(new URL(path, import.meta.url).pathname).text();
+  Promise.resolve(readFileSync(new URL(path, import.meta.url).pathname, "utf-8"));
 
 /**
  * Lazy-loaded score corpus. `Bun.file().text()` is cheap to repeat but the

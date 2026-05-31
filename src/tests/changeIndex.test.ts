@@ -5,7 +5,7 @@
  * Run with: bun test src/tests/changeIndex.test.ts
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { countByChangeType, flattenChanges } from "@/utils/changeIndex";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 

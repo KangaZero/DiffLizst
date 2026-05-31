@@ -17,9 +17,9 @@
  * Run with: `bun test src/tests/fixtures-smoke.test.ts`
  */
 
-import { describe, expect, it } from "bun:test";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 import { diffXML, type XMLDiffOptions } from "@/utils/diffXML";
 
 const FIXTURE_DIR = fileURLToPath(new URL("../../tests/fixtures/musicxml-real/", import.meta.url));
@@ -61,16 +61,16 @@ describe("musicxml-real fixtures", () => {
 
   for (const file of fixtures) {
     describe(file, () => {
-      it("parses with a valid MusicXML root element", async () => {
-        const xml = await Bun.file(`${FIXTURE_DIR}${file}`).text();
+      it("parses with a valid MusicXML root element", () => {
+        const xml = readFileSync(`${FIXTURE_DIR}${file}`, "utf-8");
         const doc = new DOMParser().parseFromString(xml, "application/xml");
         const root = doc.documentElement?.nodeName;
         expect(root).toBeDefined();
         expect(VALID_ROOTS.has(root as string)).toBe(true);
       });
 
-      it("self-diff yields zero changes", async () => {
-        const xml = await Bun.file(`${FIXTURE_DIR}${file}`).text();
+      it("self-diff yields zero changes", () => {
+        const xml = readFileSync(`${FIXTURE_DIR}${file}`, "utf-8");
         const result = diffXML(xml, xml, DEFAULT_DIFF_OPTIONS);
         expect(result.measures.size).toBe(0);
         expect(result.credits.size).toBe(0);

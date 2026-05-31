@@ -10,7 +10,7 @@
  * Run with: `bun test src/tests/applyDiffHighlights.test.ts`
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
 
 /**
