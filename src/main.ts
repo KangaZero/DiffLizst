@@ -19,6 +19,7 @@ import {
   runDiff,
   updateScaleOutput,
 } from "@/bootstrap/notation-pipeline";
+import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
 import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
 import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
@@ -91,6 +92,7 @@ const diffEditToggleBtn = document.querySelector<HTMLButtonElement>("#diff-edit-
 const prevChangeBtn = document.querySelector<HTMLButtonElement>("#prev-change")!;
 const nextChangeBtn = document.querySelector<HTMLButtonElement>("#next-change")!;
 const changeCounterEl = document.querySelector<HTMLSpanElement>("#change-counter")!;
+const diffSummaryAside = document.querySelector<HTMLElement>("#diff-summary")!;
 
 if (
   !notationContainer ||
@@ -114,7 +116,8 @@ if (
   !diffEditToggleBtn ||
   !prevChangeBtn ||
   !nextChangeBtn ||
-  !changeCounterEl
+  !changeCounterEl ||
+  !diffSummaryAside
 ) {
   throw new Error("Required app elements not found in DOM");
 }
@@ -349,12 +352,18 @@ wireDropZone(notationContainer2, 2, "score 2");
 let currentChanges: ChangeEntry[] = [];
 let currentChangeIdx = -1;
 
+const diffSummary = wireDiffSummary(diffSummaryAside, (id) => {
+  const idx = currentChanges.findIndex((c) => c.id === id);
+  if (idx !== -1) focusChange(idx);
+});
+
 function refreshChangeNav(): void {
   currentChanges = flattenChanges(state.xmlDiff);
   currentChangeIdx = currentChanges.length > 0 ? 0 : -1;
   updateChangeCounter();
   prevChangeBtn.disabled = currentChanges.length === 0;
   nextChangeBtn.disabled = currentChanges.length === 0;
+  diffSummary.refresh(currentChanges);
 }
 
 function updateChangeCounter(): void {

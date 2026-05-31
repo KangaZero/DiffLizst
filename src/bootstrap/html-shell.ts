@@ -84,6 +84,25 @@ export const APP_HTML = `
       <div id="XML-notation-compare" class="notation-stage">Loading score…</div>
     </div>
   </div>
+  <aside id="diff-summary" class="diff-summary" aria-label="Diff summary">
+    <header class="diff-summary-header">
+      <button id="diff-summary-toggle" class="diff-summary-toggle" type="button" aria-expanded="true" aria-controls="diff-summary-body">
+        <svg class="diff-summary-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m9 18 6-6-6-6"/>
+        </svg>
+        <span>Changes</span>
+        <span id="diff-summary-counts" class="diff-summary-counts" aria-live="polite"></span>
+      </button>
+    </header>
+    <div id="diff-summary-body" class="diff-summary-body">
+      <div class="diff-summary-filters" role="group" aria-label="Filter by change type">
+        <button class="diff-summary-chip" type="button" data-filter="add" aria-pressed="true">added</button>
+        <button class="diff-summary-chip" type="button" data-filter="remove" aria-pressed="true">removed</button>
+        <button class="diff-summary-chip" type="button" data-filter="change" aria-pressed="true">changed</button>
+      </div>
+      <ol id="diff-summary-list" class="diff-summary-list" aria-live="polite"></ol>
+    </div>
+  </aside>
 </section>
 <div class="ticks"></div>
 <section id="spacer"></section>
