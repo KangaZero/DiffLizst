@@ -544,6 +544,107 @@ export function summariseNoteDiff(oldNote: Element, newNote: Element): NoteField
   return changes;
 }
 
+// ─── diffElementList helper ────────────────────────────────────────────────
+
+/**
+ * Configuration for one pass of {@link diffElementList}.
+ *
+ * `K` is the map key type (`number` for all current callers).
+ */
+interface ElementListConfig<K> {
+  xml1: string;
+  xml2: string;
+  /** All elements from the "old" document that belong to this group. */
+  els1: Element[];
+  /** All elements from the "new" document that belong to this group. */
+  els2: Element[];
+  /**
+   * Extract the iteration key for a given element.
+   * For position-keyed lists (credits, partLists) this is just the array index.
+   * For measure elements it is the parsed `number` attribute.
+   */
+  keyOf: (el: Element, idx: number) => K;
+  /**
+   * Build the opening search string used by {@link findLineOffset} and
+   * {@link sliceElement} for this key.
+   */
+  openPattern: (key: K) => string;
+  /** Closing tag string, e.g. `"</measure>"`. */
+  closeTag: string;
+  /** Human-readable label inserted into the tooltip header. */
+  labelFor: (key: K) => string;
+  opts: XMLDiffOptions;
+  /** Output map — results are written here. */
+  out: Map<K, ElementDiff>;
+  /**
+   * Optional hook called instead of the standard elementDiff when both sides
+   * exist. Used by the measure loop in detailedDiff mode to delegate to
+   * {@link diffChildrenByTag} rather than diffing the whole element.
+   * When the hook returns `true` the main loop skips its own elementDiff call.
+   */
+  detailedDiffChildren?: (el1: Element, el2: Element, key: K) => boolean;
+}
+
+/**
+ * Run the find-match-diff loop for one category of XML elements.
+ *
+ * Deduplicates the three near-identical loops that previously existed inline
+ * inside `diffXML` (measures, credits, partLists). Each caller supplies a
+ * config that describes how to key, open-pattern, close-tag, and label its
+ * elements; the loop logic is identical across all three.
+ */
+function diffElementList<K>({
+  xml1,
+  xml2,
+  els1,
+  els2,
+  keyOf,
+  openPattern,
+  closeTag,
+  labelFor,
+  opts,
+  out,
+  detailedDiffChildren,
+}: ElementListConfig<K>): void {
+  // Build a unified key set that covers both sides so additions/removals are caught.
+  const keys = new Set<K>();
+  const map1 = new Map<K, Element>();
+  const map2 = new Map<K, Element>();
+  for (let i = 0; i < els1.length; i++) {
+    const key = keyOf(els1[i], i);
+    keys.add(key);
+    map1.set(key, els1[i]);
+  }
+  for (let i = 0; i < els2.length; i++) {
+    const key = keyOf(els2[i], i);
+    keys.add(key);
+    map2.set(key, els2[i]);
+  }
+
+  for (const key of keys) {
+    const e1 = map1.get(key);
+    const e2 = map2.get(key);
+    const label = labelFor(key);
+    const open = openPattern(key);
+
+    if (e1 && e2) {
+      if (detailedDiffChildren?.(e1, e2, key)) continue;
+      const o1 = findLineOffset(xml1, open);
+      const o2 = findLineOffset(xml2, open);
+      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, open, closeTag);
+      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, open, closeTag);
+      const d = elementDiff(e1, e2, label, opts, o1, o2, r1, r2);
+      if (d) out.set(key, d);
+    } else if (e1) {
+      const o1 = findLineOffset(xml1, open);
+      out.set(key, singleSideDiff(e1, label, "remove", o1));
+    } else if (e2) {
+      const o2 = findLineOffset(xml2, open);
+      out.set(key, singleSideDiff(e2, label, "add", o2));
+    }
+  }
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -574,112 +675,70 @@ export function diffXML(xml1: string, xml2: string, opts: XMLDiffOptions): XMLDi
 
   const measures = new Map<number, ElementDiff>();
   const credits = new Map<number, ElementDiff>();
-  const children = new Map<ChildDiffKey, ElementDiff>();
   const partLists = new Map<number, ElementDiff>();
+  const children = new Map<ChildDiffKey, ElementDiff>();
 
-  // ── Measures ──────────────────────────────────────────────────────────
-  // Index by `number` attribute so insertions/deletions don't mis-align.
-  const measureMap1 = new Map<number, Element>();
-  const measureMap2 = new Map<number, Element>();
+  // In detailedDiff mode the measure loop delegates to per-tag child diffing
+  // rather than diffing the whole measure element.
+  const measureDetailedHook: ElementListConfig<number>["detailedDiffChildren"] = opts.detailedDiff
+    ? (m1, m2, num) => {
+        diffChildrenByTag(
+          Array.from(m1.children),
+          Array.from(m2.children),
+          String(num),
+          `measure ${num}`,
+          opts,
+          children,
+        );
+        return true;
+      }
+    : undefined;
 
-  for (const m of doc1.querySelectorAll("measure")) {
-    measureMap1.set(Number.parseInt(m.getAttribute("number") ?? "0", 10), m);
-  }
-  for (const m of doc2.querySelectorAll("measure")) {
-    measureMap2.set(Number.parseInt(m.getAttribute("number") ?? "0", 10), m);
-  }
+  // ── Measures — keyed by `number` attribute ────────────────────────────
+  diffElementList<number>({
+    xml1,
+    xml2,
+    els1: Array.from(doc1.querySelectorAll("measure")),
+    els2: Array.from(doc2.querySelectorAll("measure")),
+    keyOf: (el) => Number.parseInt(el.getAttribute("number") ?? "0", 10),
+    openPattern: (num) => `<measure number="${num}"`,
+    closeTag: "</measure>",
+    labelFor: (num) => `measure ${num}`,
+    opts,
+    out: measures,
+    detailedDiffChildren: measureDetailedHook,
+  });
 
-  for (const num of new Set([...measureMap1.keys(), ...measureMap2.keys()])) {
-    const m1 = measureMap1.get(num);
-    const m2 = measureMap2.get(num);
+  // ── Credits — matched by position (no stable identity attribute) ──────
+  diffElementList<number>({
+    xml1,
+    xml2,
+    els1: Array.from(doc1.querySelectorAll("credit")),
+    els2: Array.from(doc2.querySelectorAll("credit")),
+    keyOf: (_el, i) => i,
+    openPattern: () => "<credit",
+    closeTag: "</credit>",
+    labelFor: (i) => `credit ${i}`,
+    opts,
+    out: credits,
+  });
 
-    if (m1 && m2 && opts.detailedDiff) {
-      // ── Detailed mode: diff per-tag groups within the measure ──────────
-      // Children are grouped by tag name so that e.g. <attributes> is never
-      // paired against a <note> due to an index shift.
-      diffChildrenByTag(
-        Array.from(m1.children),
-        Array.from(m2.children),
-        String(num),
-        `measure ${num}`,
-        opts,
-        children,
-      );
-    } else if (m1 && m2) {
-      const o1 = findLineOffset(xml1, `<measure number="${num}"`);
-      const o2 = findLineOffset(xml2, `<measure number="${num}"`);
-      const r1 = opts.ignoreWhitespace
-        ? undefined
-        : sliceElement(xml1, `<measure number="${num}"`, "</measure>");
-      const r2 = opts.ignoreWhitespace
-        ? undefined
-        : sliceElement(xml2, `<measure number="${num}"`, "</measure>");
-      const d = elementDiff(m1, m2, `measure ${num}`, opts, o1, o2, r1, r2);
-      if (d) measures.set(num, d);
-    } else if (m1) {
-      const o1 = findLineOffset(xml1, `<measure number="${num}"`);
-      measures.set(num, singleSideDiff(m1, `measure ${num}`, "remove", o1));
-    } else if (m2) {
-      const o2 = findLineOffset(xml2, `<measure number="${num}"`);
-      measures.set(num, singleSideDiff(m2, `measure ${num}`, "add", o2));
-    }
-  }
+  // ── Part-lists ────────────────────────────────────────────────────────
+  diffElementList<number>({
+    xml1,
+    xml2,
+    els1: Array.from(doc1.querySelectorAll("part-list")),
+    els2: Array.from(doc2.querySelectorAll("part-list")),
+    keyOf: (_el, i) => i,
+    openPattern: () => "<part-list",
+    closeTag: "</part-list>",
+    labelFor: (i) => `part-list ${i}`,
+    opts,
+    out: partLists,
+  });
 
-  // ── Credits ───────────────────────────────────────────────────────────
-  // Matched by position — credits have no stable identity attribute.
-  const credits1 = Array.from(doc1.querySelectorAll("credit"));
-  const credits2 = Array.from(doc2.querySelectorAll("credit"));
-
-  for (let i = 0; i < Math.max(credits1.length, credits2.length); i++) {
-    const c1 = credits1[i];
-    const c2 = credits2[i];
-
-    if (c1 && c2) {
-      const o1 = findLineOffset(xml1, "<credit", i);
-      const o2 = findLineOffset(xml2, "<credit", i);
-      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, "<credit", "</credit>", i);
-      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, "<credit", "</credit>", i);
-      const d = elementDiff(c1, c2, `credit ${i}`, opts, o1, o2, r1, r2);
-      if (d) credits.set(i, d);
-    } else if (c1) {
-      const o1 = findLineOffset(xml1, "<credit", i);
-      credits.set(i, singleSideDiff(c1, `credit ${i}`, "remove", o1));
-    } else if (c2) {
-      const o2 = findLineOffset(xml2, "<credit", i);
-      credits.set(i, singleSideDiff(c2, `credit ${i}`, "add", o2));
-    }
-  }
-
-  const partLists1 = Array.from(doc1.querySelectorAll("part-list"));
-  const partLists2 = Array.from(doc2.querySelectorAll("part-list"));
-
-  for (let i = 0; i < Math.max(partLists1.length, partLists2.length); i++) {
-    const p1 = partLists1[i];
-    const p2 = partLists2[i];
-
-    if (p1 && p2) {
-      const o1 = findLineOffset(xml1, "<part-list", i);
-      const o2 = findLineOffset(xml2, "<part-list", i);
-      const r1 = opts.ignoreWhitespace
-        ? undefined
-        : sliceElement(xml1, "<part-list", "</part-list>", i);
-      const r2 = opts.ignoreWhitespace
-        ? undefined
-        : sliceElement(xml2, "<part-list", "</part-list>", i);
-      const d = elementDiff(p1, p2, `part-list ${i}`, opts, o1, o2, r1, r2);
-      if (d) partLists.set(i, d);
-    } else if (p1) {
-      const o1 = findLineOffset(xml1, "<part-list", i);
-      partLists.set(i, singleSideDiff(p1, `part-list ${i}`, "remove", o1));
-    } else if (p2) {
-      const o2 = findLineOffset(xml2, "<part-list", i);
-      partLists.set(i, singleSideDiff(p2, `part-list ${i}`, "add", o2));
-    }
-  }
-  // ── Top-level elements (detailed mode only) ───────────────────────────
-  // Diffs direct children of the root <score-partwise> / <score-timewise>
-  // element that aren't already handled: excludes <credit> (handled above)
-  // and <part> (contains measures, handled above).
+  // ── Top-level elements (detailedDiff only) ────────────────────────────
+  // Excludes <credit> and <part> — both are already handled above.
   if (opts.detailedDiff) {
     const SKIP = new Set(["credit", "part"]);
     const rootKids1 = Array.from(doc1.documentElement.children).filter(
