@@ -88,3 +88,17 @@ button:focus-visible~[role="tooltip"] {
     translate: -50% 0;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+
+  svg {
+    transition: none;
+  }
+
+  [role="tooltip"] {
+    transition: none;
+  }
+}
