@@ -4,12 +4,19 @@ import "./components/themeToggle";
 import "./components/pages";
 import "./components/diffSettings";
 import "./components/scoreLoader";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import type { toolkit as Toolkit } from "verovio";
 import * as verovio from "verovio";
 import { renderGitDiffPage, wireGitDiffSplitToggle } from "@/bootstrap/git-diff-page";
+import { wireOverlayToMonaco } from "@/bootstrap/hover-link";
 import { APP_HTML } from "@/bootstrap/html-shell";
-import { getMonacoDiffEditor, renderCodeDiffPage, wireEditToggle } from "@/bootstrap/monaco-page";
+import { loadMonaco } from "@/bootstrap/monaco-lazy";
+import {
+  getHoverHighlighter,
+  getMonacoDiffEditor,
+  refreshHoverLink,
+  renderCodeDiffPage,
+  wireEditToggle,
+} from "@/bootstrap/monaco-page";
 import {
   type NotationState,
   reapplyDiff,
@@ -23,7 +30,7 @@ import {
 import { wireScrollSync } from "@/bootstrap/scroll-sync";
 import { wireDiffSummary } from "@/components/diffSummary";
 import { type ScoreFileDropDetail, wireFileDrop } from "@/components/fileDrop";
-import { buildChildIdMap, buildMeasureIdMap } from "@/utils/applyDiffHighlights";
+import { buildChildIdMap, buildMeasureIdMap, getOverlayRecords } from "@/utils/applyDiffHighlights";
 import { type ChangeEntry, flattenChanges } from "@/utils/changeIndex";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "@/utils/diffXML";
 import { loadScoreFile } from "@/utils/loadScoreFile";
@@ -41,12 +48,6 @@ import type {
   ScoreLoader,
   ScoreLoaderSample,
 } from "./components/scoreLoader";
-
-self.MonacoEnvironment = {
-  getWorker(_id: string, _label: string): Worker {
-    return new EditorWorker();
-  },
-};
 
 // ─── Score sources ─────────────────────────────────────────────────────────
 const _scoreModules = import.meta.glob<string>("./scores/**/*.xml", {
@@ -171,6 +172,26 @@ const state: NotationState = {
 
 const containers: [HTMLDivElement, HTMLDivElement] = [notationContainer, notationContainer2];
 
+// ─── Hover-link wiring ─────────────────────────────────────────────────────
+// Overlay → Monaco and Monaco → overlay listeners are rebuilt after every
+// applyDiffHighlights run because overlays are replaced from scratch each time.
+// The dispose function from the previous run cleans up stale listeners before
+// the new overlay set is wired.
+
+let disposeOverlayToMonaco: (() => void) | null = null;
+
+function rewireHoverLink(): void {
+  disposeOverlayToMonaco?.();
+  disposeOverlayToMonaco = null;
+
+  const highlighter = getHoverHighlighter();
+  if (!highlighter) return;
+
+  const records = getOverlayRecords();
+  disposeOverlayToMonaco = wireOverlayToMonaco(records, highlighter);
+  refreshHoverLink(getOverlayRecords);
+}
+
 // ─── Monaco callbacks ──────────────────────────────────────────────────────
 
 function rerenderScore2Background(xml: string): void {
@@ -196,6 +217,23 @@ const monacoCallbacks = {
   rerenderScore2: rerenderScore2Background,
 };
 
+// ─── Loading indicator ────────────────────────────────────────────────────
+// Shown only while the Monaco chunk is fetching on first open. Removed once
+// the editor mounts. Plain text — no spinner — respects prefers-reduced-motion.
+
+function showMonacoLoadingIndicator(): HTMLParagraphElement {
+  const p = document.createElement("p");
+  p.id = "monaco-loading";
+  p.textContent = "Loading editor…";
+  p.style.cssText = "padding:2rem;text-align:center;color:var(--color-muted,#888);";
+  diffEditorContainer.appendChild(p);
+  return p;
+}
+
+function removeMonacoLoadingIndicator(el: HTMLParagraphElement): void {
+  el.remove();
+}
+
 // ─── View toggle ───────────────────────────────────────────────────────────
 
 const notationSections = [
@@ -206,7 +244,7 @@ const notationSections = [
 type View = "notation" | "monaco" | "gitdiff";
 let activeView: View = "notation";
 
-function switchView(target: View): void {
+async function switchView(target: View): Promise<void> {
   activeView = activeView === target ? "notation" : target;
   const isMonaco = activeView === "monaco";
   const isGitDiff = activeView === "gitdiff";
@@ -220,12 +258,17 @@ function switchView(target: View): void {
 
   if (isMonaco) {
     diffPageEl.classList.add("visible");
+    const loadingEl = showMonacoLoadingIndicator();
+    const monaco = await loadMonaco();
+    removeMonacoLoadingIndicator(loadingEl);
     renderCodeDiffPage(
+      monaco,
       state.originalXML,
       state.xMLToCompare,
       diffEditorContainer,
       currentSettings,
       monacoCallbacks,
+      getOverlayRecords,
     );
     requestAnimationFrame(() => getMonacoDiffEditor()?.layout());
   } else {
@@ -240,7 +283,7 @@ function switchView(target: View): void {
   }
 }
 
-viewToggleBtn.addEventListener("click", () => switchView("monaco"));
+viewToggleBtn.addEventListener("click", () => void switchView("monaco"));
 gitDiffToggleBtn.addEventListener("click", () => switchView("gitdiff"));
 
 // ─── Monaco navigation from diff overlays ─────────────────────────────────
@@ -268,7 +311,7 @@ function navigateMonacoToDiff(diff: ElementDiff): void {
 [notationContainer, notationContainer2].forEach((container) => {
   container.addEventListener("diff-navigate", (e) => {
     const diff = (e as CustomEvent<ElementDiff>).detail;
-    switchView("monaco");
+    void switchView("monaco");
     requestAnimationFrame(() => navigateMonacoToDiff(diff));
   });
 });
@@ -316,9 +359,6 @@ wireScoreLoader(scoreLoaderEl, 1);
 wireScoreLoader(scoreLoaderEl2, 2);
 
 // ─── File drop zones ──────────────────────────────────────────────────────
-// Drop overlays render on top of each notation stage. They stay invisible
-// until the user drags a file over the stage (or focuses the zone via Tab),
-// at which point they expand and accept .xml / .musicxml / .mxl uploads.
 
 function wireDropZone(stage: HTMLElement, which: 1 | 2, slotLabel: string): void {
   wireFileDrop(stage, slotLabel);
@@ -355,10 +395,6 @@ wireDropZone(notationContainer, 1, "score 1");
 wireDropZone(notationContainer2, 2, "score 2");
 
 // ─── Change navigation (next / prev) ──────────────────────────────────────
-// Flat ordered list of every change, rebuilt after each runDiff so the
-// keyboard shortcuts and counter always reflect the current diff. Held at
-// module scope rather than recomputed per keypress because the j/k cadence
-// can be fast and a typical Chopin diff produces hundreds of entries.
 
 let currentChanges: ChangeEntry[] = [];
 let currentChangeIdx = -1;
@@ -369,11 +405,6 @@ const diffSummary = wireDiffSummary(diffSummaryAside, (id) => {
 });
 
 // ─── Mobile sidebar overlay ────────────────────────────────────────────────
-// On narrow viewports the aside slides in from the right as an overlay.
-// The close button inside it dismisses it; any click on the backdrop also
-// dismisses it (the backdrop element is injected via CSS ::before on <body>
-// when data-summary-open is set, but we handle the click via a real element
-// for accessibility reasons).
 
 function openSidebarOverlay(): void {
   diffSummaryAside.dataset.mobileOpen = "true";
@@ -388,12 +419,10 @@ function closeSidebarOverlay(): void {
 
 diffSummaryMobileCloseBtn.addEventListener("click", closeSidebarOverlay);
 
-// Close when focus leaves the aside entirely (Tab past the last item).
 diffSummaryAside.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Escape") closeSidebarOverlay();
 });
 
-// Toolbar open button — only present on mobile (hidden via CSS on desktop).
 diffSummaryOpenBtn?.addEventListener("click", openSidebarOverlay);
 
 /**
@@ -424,6 +453,10 @@ function enrichOverlays(containers: readonly HTMLElement[]): void {
       });
     }
   }
+  // Rebuild hover-link listeners after the overlay set is finalised.
+  // This is idempotent when Monaco hasn't been opened yet (rewireHoverLink
+  // guards on getHoverHighlighter returning non-null).
+  rewireHoverLink();
 }
 
 function refreshChangeNav(): void {
@@ -457,10 +490,7 @@ function focusChange(idx: number): void {
   updateChangeCounter();
   const change = currentChanges[idx];
 
-  // Each stage has one overlay per ElementDiff; find by data attribute if
-  // present, else fall back to label match in tooltip-header text.
   for (const container of containers) {
-    // Strip old pulse class so re-triggering works for the same overlay.
     container.querySelectorAll(".diff-overlay--focus").forEach((el) => {
       el.classList.remove("diff-overlay--focus");
     });
@@ -469,8 +499,6 @@ function focusChange(idx: number): void {
       if (overlay.dataset.diffLabel === change.diff.label) {
         overlay.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
         overlay.classList.add("diff-overlay--focus");
-        // Remove the pulse class after the animation so the next nav can
-        // trigger it again. Matches the 800ms * 2 from CSS.
         setTimeout(() => overlay.classList.remove("diff-overlay--focus"), 1700);
         break;
       }
@@ -488,7 +516,6 @@ nextChangeBtn.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (e) => {
-  // Don't hijack keys while the user is typing in an input / editor.
   const target = e.target as HTMLElement | null;
   if (
     target &&
@@ -512,8 +539,6 @@ document.addEventListener("keydown", (e) => {
 // ─── Button wiring ─────────────────────────────────────────────────────────
 
 swapScoresBtn.addEventListener("click", () => {
-  // Read displayed filenames from the DOM — they are the authoritative source
-  // since reloadScore and the initial load both write to these elements.
   const filename1 =
     document.querySelector<HTMLElement>(".diff-file-old")?.textContent?.trim() ?? "";
   const filename2 =
@@ -589,14 +614,18 @@ diffSettingsEl.addEventListener("settings-change", (e) => {
   gitDiffSplitToggleBtn.textContent = isSplit ? "Unified" : "Split";
   runDiff(state, containers, currentSettings);
   refreshChangeNav();
-  if (activeView === "monaco")
-    renderCodeDiffPage(
-      state.originalXML,
-      state.xMLToCompare,
-      diffEditorContainer,
-      currentSettings,
-      monacoCallbacks,
-    );
+  if (activeView === "monaco") {
+    void loadMonaco().then((monaco) => {
+      renderCodeDiffPage(
+        monaco,
+        state.originalXML,
+        state.xMLToCompare,
+        diffEditorContainer,
+        currentSettings,
+        monacoCallbacks,
+      );
+    });
+  }
 });
 
 // ─── Page-change listeners ─────────────────────────────────────────────────
@@ -620,9 +649,6 @@ verovio.module.onRuntimeInitialized = async () => {
   state.toolkit2 = new verovio.toolkit();
 
   try {
-    // Select by id rather than positional index — glob ordering is
-    // filesystem-dependent and silently picks the wrong defaults when files
-    // are added or renamed.
     const findScore = (id: string) => SAMPLE_SCORES.find((s) => s.id === id)?.xml ?? null;
     state.originalXML = findScore("Chopin-etudeOp10No1V2") ?? SAMPLE_SCORES[0]?.xml ?? null;
     state.xMLToCompare = findScore("Chopin-etudeOp10No1") ?? SAMPLE_SCORES[1]?.xml ?? null;

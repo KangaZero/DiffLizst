@@ -24,10 +24,26 @@
  * overlays are removed.
  */
 
+import type { OverlayRecord } from "@/bootstrap/hover-link";
 import type { ChildDiffKey, ElementDiff, XMLDiffResult } from "./diffXML";
 
 /** Singleton tooltip element shared across all overlays. */
 let tooltipEl: HTMLDivElement | null = null;
+
+/**
+ * Flat list of every overlay created in the most recent applyDiffHighlights
+ * call, in creation order. Exposed so the hover-link module can rebuild its
+ * line → overlay lookup without re-querying the DOM.
+ *
+ * Replaced atomically at the top of each applyDiffHighlights call, so callers
+ * holding a reference from a previous render should not cache it across renders.
+ */
+let lastOverlayRecords: OverlayRecord[] = [];
+
+/** Return the overlay records from the most recent applyDiffHighlights call. */
+export function getOverlayRecords(): readonly OverlayRecord[] {
+  return lastOverlayRecords;
+}
 
 /** Both line-number variants cached per ElementDiff object. */
 const tooltipCache = new WeakMap<ElementDiff, { with: string; without: string }>();
@@ -204,6 +220,15 @@ function createOverlay(
   return overlay;
 }
 
+/**
+ * Append an overlay to a container and register it in the module-level record
+ * list so the hover-link module can iterate them without another DOM query.
+ */
+function appendOverlay(container: HTMLElement, overlay: HTMLDivElement, diff: ElementDiff): void {
+  container.appendChild(overlay);
+  lastOverlayRecords.push({ overlay, diff });
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -325,6 +350,9 @@ export function applyDiffHighlights(
   svgToChildKey2: Map<string, ChildDiffKey>,
   showLineNumbers = true,
 ): void {
+  // Reset registry before populating so callers always get the current set
+  lastOverlayRecords = [];
+
   // Remove stale overlays from the previous render
   for (const c of [container1, container2]) {
     for (const el of c.querySelectorAll(".diff-overlay")) {
@@ -343,7 +371,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "add") return; // 'add' only shown on right side
-    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
+    appendOverlay(container1, createOverlay(el, container1, d, showLineNumbers), d);
   });
 
   container2.querySelectorAll<SVGGElement>("g.measure").forEach((el) => {
@@ -352,7 +380,7 @@ export function applyDiffHighlights(
     if (num === undefined) return;
     const d = diff.measures.get(num);
     if (!d || d.changeType === "remove") return; // 'remove' only shown on left side
-    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
+    appendOverlay(container2, createOverlay(el, container2, d, showLineNumbers), d);
   });
 
   // ── Credits (page header text) ─────────────────────────────────────────
@@ -368,10 +396,10 @@ export function applyDiffHighlights(
     const t1 = texts1[idx];
     const t2 = texts2[idx];
     if (t1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(createOverlay(t1, container1, d, showLineNumbers));
+      appendOverlay(container1, createOverlay(t1, container1, d, showLineNumbers), d);
     }
     if (t2 && (d.changeType === "change" || d.changeType === "add")) {
-      container2.appendChild(createOverlay(t2, container2, d, showLineNumbers));
+      appendOverlay(container2, createOverlay(t2, container2, d, showLineNumbers), d);
     }
   }
 
@@ -392,10 +420,10 @@ export function applyDiffHighlights(
     const it1 = instrumentText1[idx];
     const it2 = instrumentText2[idx];
     if (it1 && (d.changeType === "change" || d.changeType === "remove")) {
-      container1.appendChild(createOverlay(it1, container1, d, showLineNumbers));
+      appendOverlay(container1, createOverlay(it1, container1, d, showLineNumbers), d);
     }
     if (it2 && (d.changeType === "change" || d.changeType === "add")) {
-      container2.appendChild(createOverlay(it2, container2, d, showLineNumbers));
+      appendOverlay(container2, createOverlay(it2, container2, d, showLineNumbers), d);
     }
   }
   // ── Detailed child diffs (note / rest level) ───────────────────────────
@@ -408,7 +436,7 @@ export function applyDiffHighlights(
     if (!key) return;
     const d = diff.children.get(key);
     if (!d || d.changeType === "add") return;
-    container1.appendChild(createOverlay(el, container1, d, showLineNumbers));
+    appendOverlay(container1, createOverlay(el, container1, d, showLineNumbers), d);
   });
 
   container2.querySelectorAll<SVGGElement>("g.note, g.rest").forEach((el) => {
@@ -416,6 +444,6 @@ export function applyDiffHighlights(
     if (!key) return;
     const d = diff.children.get(key);
     if (!d || d.changeType === "remove") return;
-    container2.appendChild(createOverlay(el, container2, d, showLineNumbers));
+    appendOverlay(container2, createOverlay(el, container2, d, showLineNumbers), d);
   });
 }

@@ -1,4 +1,10 @@
-import * as monaco from "monaco-editor";
+import type * as Monaco from "monaco-editor";
+import {
+  createMonacoHighlighter,
+  type MonacoHighlighter,
+  type OverlayRecord,
+  wireMonacoToOverlay,
+} from "@/bootstrap/hover-link";
 import type { DiffSettingsValue } from "@/components/diffSettings";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -15,17 +21,21 @@ export interface MonacoCallbacks {
 // ─── Module-local singletons (monaco-page owns these, not main.ts) ──────────
 
 /** Singleton Monaco diff editor created on first view toggle. */
-let monacoDiffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
+let monacoDiffEditor: Monaco.editor.IStandaloneDiffEditor | null = null;
 
 /** Whether the modified (right) pane is currently editable. */
 let diffEditorEditable = false;
 
+// ─── Hover-link singletons ────────────────────────────────────────────────────
+
+/** Manages Monaco line decorations triggered by overlay hover. */
+let hoverHighlighter: MonacoHighlighter | null = null;
+
+/** Dispose function returned by wireMonacoToOverlay — clears Monaco → overlay listeners. */
+let disposeMonacoToOverlay: (() => void) | null = null;
+
 // ─── Debounce ────────────────────────────────────────────────────────────────
 
-/**
- * Minimal generic debounce — waits `ms` milliseconds of silence before
- * calling `fn`. Resets the timer on every new call.
- */
 function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number): (...args: T) => void {
   let timer: ReturnType<typeof setTimeout>;
   return (...args: T) => {
@@ -49,8 +59,43 @@ export function getMonacoTheme(): string {
  * Expose the singleton editor so main.ts can use it for navigation and
  * model updates without monaco-page needing to know about those call sites.
  */
-export function getMonacoDiffEditor(): monaco.editor.IStandaloneDiffEditor | null {
+export function getMonacoDiffEditor(): Monaco.editor.IStandaloneDiffEditor | null {
   return monacoDiffEditor;
+}
+
+// ─── Hover-link public API ────────────────────────────────────────────────────
+
+/**
+ * Rebuild the bidirectional hover link after each applyDiffHighlights run.
+ *
+ * Called from main.ts wherever overlays are rebuilt (runDiff, reapplyDiff,
+ * rerenderScore2Background). If the editor hasn't been opened yet this is a
+ * no-op — the link is wired on first renderCodeDiffPage instead.
+ *
+ * @param getRecords  Getter returning the current OverlayRecord list. The
+ *                    Monaco → overlay listener calls this on every mousemove so
+ *                    it always operates on the freshest set without a closure
+ *                    over a stale snapshot.
+ */
+export function refreshHoverLink(getRecords: () => readonly OverlayRecord[]): void {
+  if (!monacoDiffEditor) return;
+
+  // Tear down previous Monaco → overlay wiring before installing new one.
+  disposeMonacoToOverlay?.();
+  disposeMonacoToOverlay = wireMonacoToOverlay(monacoDiffEditor, getRecords);
+
+  // Highlighter is stateful (it holds decoration collection handles), reuse it.
+  if (!hoverHighlighter) {
+    hoverHighlighter = createMonacoHighlighter(monacoDiffEditor);
+  }
+}
+
+/**
+ * Expose the current MonacoHighlighter so applyDiffHighlights' wiring step
+ * (wireOverlayToMonaco) can be done in main.ts with the fresh overlay set.
+ */
+export function getHoverHighlighter(): MonacoHighlighter | null {
+  return hoverHighlighter;
 }
 
 // ─── Edit-toggle wiring ──────────────────────────────────────────────────────
@@ -92,6 +137,10 @@ export function buildSyncFromMonaco(callbacks: MonacoCallbacks): () => void {
 /**
  * Mount or update the Monaco side-by-side diff editor.
  *
+ * Receives the resolved `monaco` namespace so this module stays import-free
+ * from monaco-editor at the top level — the dynamic import is owned by
+ * `monaco-lazy.ts`.
+ *
  * **First call** — creates the editor, sets the initial models, and wires up
  * the content-change listener so edits propagate back via the debounced sync.
  *
@@ -99,11 +148,13 @@ export function buildSyncFromMonaco(callbacks: MonacoCallbacks): () => void {
  * Models are left untouched so user edits are not lost when settings change.
  */
 export function renderCodeDiffPage(
+  monaco: typeof Monaco,
   originalXML: string | null,
   xMLToCompare: string | null,
   container: HTMLElement,
   settings: DiffSettingsValue,
   callbacks: MonacoCallbacks,
+  getOverlayRecords?: () => readonly OverlayRecord[],
 ): void {
   if (!originalXML || !xMLToCompare) return;
 
@@ -139,6 +190,13 @@ export function renderCodeDiffPage(
 
     const syncFromMonaco = buildSyncFromMonaco(callbacks);
     monacoDiffEditor.getModel()?.modified.onDidChangeContent(syncFromMonaco);
+
+    // Wire bidirectional hover link now that the editor exists.
+    hoverHighlighter = createMonacoHighlighter(monacoDiffEditor);
+    if (getOverlayRecords) {
+      disposeMonacoToOverlay?.();
+      disposeMonacoToOverlay = wireMonacoToOverlay(monacoDiffEditor, getOverlayRecords);
+    }
   } else {
     // Preserve user edits — only update appearance options.
     // lineNumbers must be set on each pane individually; the diff editor's

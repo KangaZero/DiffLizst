@@ -95,6 +95,43 @@ describe("diffXML", () => {
         true,
       );
     });
+
+    it(
+      "with multiple credits + ignoreWhitespace: false, each credit is sliced from " +
+        "its own document position (regression — diffElementList must pass " +
+        "occurrence index to sliceElement)",
+      () => {
+        // Two credits. The second credit's text differs; the first is identical.
+        // With ignoreWhitespace: false, the raw-slice path is taken. Before the
+        // occurrence-index fix this resolved BOTH credits to the same first-occurrence
+        // slice, so the second credit's diff was reported against the first
+        // credit's raw text (yielding the wrong remove/add content).
+        const tail = `<part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>whole</type></note></measure></part>
+</score-partwise>`;
+        const xml1 = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <credit page="1"><credit-type>title</credit-type><credit-words>FIRST</credit-words></credit>
+  <credit page="1"><credit-type>composer</credit-type><credit-words>OLD_COMPOSER</credit-words></credit>
+  ${tail}`;
+        const xml2 = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <credit page="1"><credit-type>title</credit-type><credit-words>FIRST</credit-words></credit>
+  <credit page="1"><credit-type>composer</credit-type><credit-words>NEW_COMPOSER</credit-words></credit>
+  ${tail}`;
+        const result = diffXML(xml1, xml2, { ...DEFAULT_DIFF_OPTIONS, ignoreWhitespace: false });
+
+        // Only the second credit should appear as a diff.
+        expect(result.credits.size).toBe(1);
+        const diff = result.credits.get(1)!;
+        expect(diff.label).toBe("credit 1");
+        // The diff content must reference the second credit's text, not the first.
+        expect(diff.lines.some((l) => l.content.includes("OLD_COMPOSER"))).toBe(true);
+        expect(diff.lines.some((l) => l.content.includes("NEW_COMPOSER"))).toBe(true);
+        // And must NOT carry the unchanged first credit's text.
+        expect(diff.lines.every((l) => !l.content.includes("FIRST"))).toBe(true);
+      },
+    );
   });
 
   describe("measure changes", () => {

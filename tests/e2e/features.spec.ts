@@ -690,3 +690,60 @@ test.describe("Within-note diff tooltip summary", () => {
     await expect(tooltip).not.toHaveClass(/diff-tooltip--visible/, { timeout: 3_000 });
   });
 });
+
+// ─── Hover-link: overlay hover highlights Monaco lines ────────────────────
+
+test.describe("Hover-link bidirectional highlight", () => {
+  test("hovering a diff overlay adds a Monaco line decoration while Monaco is open", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForBothScores(page);
+    await waitForOverlays(page);
+
+    // Open the Monaco diff view so the editor is created and hover-link is wired.
+    await page.locator("#view-toggle").click();
+    // Wait for the editor container to become visible.
+    await expect(page.locator("#diff-page")).toHaveClass(/visible/, { timeout: 10_000 });
+    // Give Monaco a moment to fully mount its DOM.
+    await page.waitForTimeout(1_500);
+
+    // Go back to notation view so the overlays are rendered and visible.
+    await page.locator("#view-toggle").click();
+    await expect(page.locator(`${NOTATION} .diff-overlay`).first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Synthetically dispatch mouseenter on the first overlay — Playwright's
+    // hover() may be intercepted by the tooltip positioning or scroll containers.
+    const hadDecoration = await page.evaluate(
+      ({ notation, notation2 }: { notation: string; notation2: string }) => {
+        const overlays = Array.from(
+          document.querySelectorAll<HTMLDivElement>(
+            `${notation} .diff-overlay, ${notation2} .diff-overlay`,
+          ),
+        );
+        if (overlays.length === 0) return false;
+        const overlay = overlays[0];
+        const rect = overlay.getBoundingClientRect();
+        overlay.dispatchEvent(
+          new MouseEvent("mouseenter", {
+            bubbles: false,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          }),
+        );
+        // Allow one rAF for the decoration to be applied.
+        return new Promise<boolean>((resolve) => {
+          requestAnimationFrame(() => {
+            const decorationEls = document.querySelectorAll(".diff-line--hover-link");
+            resolve(decorationEls.length > 0);
+          });
+        });
+      },
+      { notation: NOTATION, notation2: NOTATION_2 },
+    );
+
+    expect(hadDecoration).toBe(true);
+  });
+});

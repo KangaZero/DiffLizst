@@ -569,6 +569,15 @@ interface ElementListConfig<K> {
    * {@link sliceElement} for this key.
    */
   openPattern: (key: K) => string;
+  /**
+   * Occurrence index for `findLineOffset` / `sliceElement` when multiple
+   * elements share the same `openPattern` string. Defaults to `0` (first
+   * match). Required when `openPattern` is a fixed string and the document
+   * contains multiple elements with that same opening (e.g. several
+   * `<credit>` or `<part-list>` elements). Without this, every credit
+   * would resolve to the first credit's line offset and raw slice.
+   */
+  occurrence?: (key: K) => number;
   /** Closing tag string, e.g. `"</measure>"`. */
   closeTag: string;
   /** Human-readable label inserted into the tooltip header. */
@@ -600,6 +609,7 @@ function diffElementList<K>({
   els2,
   keyOf,
   openPattern,
+  occurrence,
   closeTag,
   labelFor,
   opts,
@@ -626,20 +636,21 @@ function diffElementList<K>({
     const e2 = map2.get(key);
     const label = labelFor(key);
     const open = openPattern(key);
+    const occ = occurrence?.(key) ?? 0;
 
     if (e1 && e2) {
       if (detailedDiffChildren?.(e1, e2, key)) continue;
-      const o1 = findLineOffset(xml1, open);
-      const o2 = findLineOffset(xml2, open);
-      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, open, closeTag);
-      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, open, closeTag);
+      const o1 = findLineOffset(xml1, open, occ);
+      const o2 = findLineOffset(xml2, open, occ);
+      const r1 = opts.ignoreWhitespace ? undefined : sliceElement(xml1, open, closeTag, occ);
+      const r2 = opts.ignoreWhitespace ? undefined : sliceElement(xml2, open, closeTag, occ);
       const d = elementDiff(e1, e2, label, opts, o1, o2, r1, r2);
       if (d) out.set(key, d);
     } else if (e1) {
-      const o1 = findLineOffset(xml1, open);
+      const o1 = findLineOffset(xml1, open, occ);
       out.set(key, singleSideDiff(e1, label, "remove", o1));
     } else if (e2) {
-      const o2 = findLineOffset(xml2, open);
+      const o2 = findLineOffset(xml2, open, occ);
       out.set(key, singleSideDiff(e2, label, "add", o2));
     }
   }
@@ -710,13 +721,19 @@ export function diffXML(xml1: string, xml2: string, opts: XMLDiffOptions): XMLDi
   });
 
   // ── Credits — matched by position (no stable identity attribute) ──────
+  // `openPattern` is "<credit " (trailing space) rather than "<credit" to
+  // avoid matching the `<credit-type>` and `<credit-words>` child elements
+  // — MusicXML requires every `<credit>` to carry the `page` attribute, so
+  // a space after the tag name uniquely identifies the wrapper. `occurrence`
+  // is the positional index so the Nth credit resolves to the Nth match.
   diffElementList<number>({
     xml1,
     xml2,
     els1: Array.from(doc1.querySelectorAll("credit")),
     els2: Array.from(doc2.querySelectorAll("credit")),
     keyOf: (_el, i) => i,
-    openPattern: () => "<credit",
+    openPattern: () => "<credit ",
+    occurrence: (i) => i,
     closeTag: "</credit>",
     labelFor: (i) => `credit ${i}`,
     opts,
@@ -724,13 +741,16 @@ export function diffXML(xml1: string, xml2: string, opts: XMLDiffOptions): XMLDi
   });
 
   // ── Part-lists ────────────────────────────────────────────────────────
+  // `<part-list>` appears without attributes in MusicXML, so the closing-`>`
+  // form is the precise pattern (avoids matching `<part-link>` if present).
   diffElementList<number>({
     xml1,
     xml2,
     els1: Array.from(doc1.querySelectorAll("part-list")),
     els2: Array.from(doc2.querySelectorAll("part-list")),
     keyOf: (_el, i) => i,
-    openPattern: () => "<part-list",
+    openPattern: () => "<part-list>",
+    occurrence: (i) => i,
     closeTag: "</part-list>",
     labelFor: (i) => `part-list ${i}`,
     opts,

@@ -37,16 +37,12 @@ export default defineConfig(({ mode }) => {
   if (mode === "lib") {
     return {
       resolve: { alias },
-      // No `publicDir` for the library build — we don't want the web app's
-      // favicon and icons copied alongside the .js artifact.
       publicDir: false,
       plugins: [
         dts({
           include: ["src/lib.ts", "src/utils/diffXML.ts"],
           rollupTypes: true,
           outDir: "dist-lib",
-          // Flatten the bundled .d.ts to `dist-lib/lib.d.ts` (matches
-          // `package.json`'s `types` field), not `dist-lib/src/lib.d.ts`.
           entryRoot: "src",
         }),
       ],
@@ -60,8 +56,6 @@ export default defineConfig(({ mode }) => {
           fileName: () => "lib.js",
         },
         rollupOptions: {
-          // Library consumers bring their own DOMParser (browser-native).
-          // We don't bundle browser globals.
           external: [],
         },
       },
@@ -73,6 +67,19 @@ export default defineConfig(({ mode }) => {
     resolve: { alias },
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
+      // Tell Monaco's feature auto-discovery to skip languages we don't need.
+      // Only the XML basic language contribution is kept — every other language
+      // chunk (the ~79 that bloated the Lighthouse audit) is excluded at build
+      // time by restricting what monaco-editor pulls in via this override.
+      "process.env.MONACO_EDITOR_SKIP_LANGUAGE_CONTRIBUTIONS": JSON.stringify(
+        "abap,apex,azcli,bat,bicep,cameligo,clojure,coffee,cpp,csharp,csp,css,cypher,dart,dockerfile,ecl,elixir,flow9,freemarker2,fsharp,go,graphql,handlebars,hcl,html,ini,java,javascript,julia,kotlin,less,lexon,liquid,lua,m3,markdown,mdx,mips,msdax,mysql,objective-c,pascal,pascaligo,perl,pgsql,php,pla,postiats,powerquery,powershell,proto,pug,python,qsharp,r,razor,redis,redshift,restructuredtext,ruby,rust,sb,scala,scheme,scss,shell,solidity,sophia,sparql,sql,st,swift,systemverilog,tcl,twig,typescript,vb,wgsl,xml-unused,yaml",
+      ),
+    },
+    build: {
+      // Monaco's lazy chunk is ~8 MB unminified. Raising the limit avoids a
+      // spurious warning for the Monaco async chunk while still catching
+      // regressions in the main entry (which should now be well under 5 MB).
+      chunkSizeWarningLimit: 5000,
     },
   };
 });

@@ -1125,6 +1125,30 @@ code {
   }
 }
 
+/* ─── Hover-link: overlay highlighted from Monaco cursor ─────────────────── */
+/* Contrast preserved: outline colours inherit from the per-type variables     */
+/* which are already WCAG-AA audited in both light and dark themes.            */
+
+.diff-overlay.diff-overlay--hover-link {
+  outline-width: 2px;
+  outline-offset: 2px;
+  filter: brightness(1.15);
+  transition:
+    outline-width var(--duration-fast) var(--ease-base),
+    filter var(--duration-fast) var(--ease-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-overlay.diff-overlay--hover-link {
+    transition: none;
+  }
+}
+
+/* Monaco line decoration triggered by overlay hover */
+.diff-line--hover-link {
+  background: var(--accent-bg);
+}
+
 .view-toggle-btn[aria-pressed='true'] {
   background: var(--accent-bg);
   border-color: var(--accent-border);
