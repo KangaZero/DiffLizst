@@ -77,13 +77,31 @@ function getTooltip(): HTMLDivElement {
  * @param diff            The element diff to render.
  * @param showLineNumbers Whether to prepend old/new line number columns.
  */
+function escapeHTML(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
   const header = `<span class="diff-tooltip-header">@@ ${diff.label} @@</span>`;
+  // Field-level summary (e.g. "pitch: C4 -> E4") only present for <note>
+  // diffs that recognised at least one semantic field change.
+  const summary =
+    diff.summary && diff.summary.length > 0
+      ? `<ul class="diff-tooltip-summary">${diff.summary
+          .map(
+            (s) =>
+              `<li><span class="diff-summary-field">${escapeHTML(s.field)}</span>` +
+              `<span class="diff-summary-before">${escapeHTML(s.before)}</span>` +
+              `<span class="diff-summary-arrow" aria-hidden="true">&rarr;</span>` +
+              `<span class="diff-summary-after">${escapeHTML(s.after)}</span></li>`,
+          )
+          .join("")}</ul>`
+      : "";
   const body = diff.lines
     .map((l) => {
       const prefix = l.type === "add" ? "+" : l.type === "remove" ? "-" : " ";
       const cls = `diff-line-${l.type}`;
-      const escaped = l.content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const escaped = escapeHTML(l.content);
       if (showLineNumbers) {
         const oldNo = l.oldLineNo != null ? String(l.oldLineNo) : "";
         const newNo = l.newLineNo != null ? String(l.newLineNo) : "";
@@ -99,7 +117,7 @@ function buildTooltipHTML(diff: ElementDiff, showLineNumbers: boolean): string {
       return `<span class="${cls}">${prefix}${escaped}</span>`;
     })
     .join("");
-  return `${header}<code class="diff-tooltip-body">${body}</code>`;
+  return `${header}${summary}<code class="diff-tooltip-body">${body}</code>`;
 }
 
 /**
